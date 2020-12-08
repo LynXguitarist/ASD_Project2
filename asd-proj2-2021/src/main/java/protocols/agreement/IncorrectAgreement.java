@@ -58,7 +58,7 @@ public class IncorrectAgreement extends GenericProtocol {
         //Nothing to do here, we just wait for events from the application or agreement
     }
 
-    //Upon receiving the channelId from the membership, register our own callbacks and serializers
+    //Upon receiving the channelId from the membership, register our own callbacks and serializer
     private void uponChannelCreated(ChannelReadyNotification notification, short sourceProto) {
         int cId = notification.getChannelId();
         myself = notification.getMyself();

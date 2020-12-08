@@ -176,6 +176,7 @@ public class StateMachine extends GenericProtocol {
 		// longer there.
 		// Also, maybe wait a little bit before retrying, or else you'll be trying 1000s
 		// of times per second
+		// maybe its better to add a timeout
 		if (membership.contains(event.getNode()))
 			openConnection(event.getNode());
 	}
