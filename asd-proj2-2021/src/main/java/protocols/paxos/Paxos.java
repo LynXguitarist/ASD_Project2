@@ -38,21 +38,23 @@ public class Paxos extends GenericProtocol {
     private int joinedInstance;
     private List<Host> membership;
 
-    private List<Integer> decisions;
-    private Map<Integer, Integer> proposals; // <proposal_sn, value>
+	private int np; // highest prepare
+	private int na; // self prepare
+	private int va; // highest accept
+	private int decision; // self decision
+	private int aset; // dunno what is this????
 
-    private int state; // = initial_state
-    private int instanceNumber;
+	public Paxos(Properties props) throws IOException, HandlerRegistrationException {
+		super(PROTOCOL_NAME, PROTOCOL_ID);
+		joinedInstance = -1; // -1 means we have not yet joined the system
+		membership = null;
 
-    private int nrPrepareOk = 0;
-    private int nrAcceptOk = 0;
+		np = -1;
+		na = -1;
+		va = -1;
+		decision = -1;
 
-    private int sna = -1;
-
-    // State: np (highest prepare), na , va (highest accept)
-    /* This state is maintained in stable storage */
-
-    // Leaner -> State: decision, na , va , aset
+		/*--------------------- Register Timer Handlers ----------------------------- */
 
     public Paxos(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
@@ -66,15 +68,11 @@ public class Paxos extends GenericProtocol {
         registerRequestHandler(AddReplicaRequest.REQUEST_ID, this::uponAddReplica);
         registerRequestHandler(RemoveReplicaRequest.REQUEST_ID, this::uponRemoveReplica);
 
-        /*--------------------- Register Notification Handlers ----------------------------- */
-        subscribeNotification(ChannelReadyNotification.NOTIFICATION_ID, this::uponChannelCreated);
-        subscribeNotification(JoinedNotification.NOTIFICATION_ID, this::uponJoinedNotification);
-    }
+	public int getState() {
+		return state;
+	}
 
-    @Override
-    public void init(Properties props) throws HandlerRegistrationException, IOException {
-        // Nothing to do here, we just wait for events from the application or agreement
-    }
+	// ---------------------------------------Paxos_Proposer----------------------------//
 
     public int getState() {
         return state;
@@ -107,35 +105,37 @@ public class Paxos extends GenericProtocol {
 
     }
 
-    // ---------------------------------------Paxos_Acceptor----------------------------//
-    private void prepare(int n) {
-//		if n > np then
-//		np = n // will not accept anything <n
-//		reply <
-//		PREPARE_OK,na,va
-    }
+	// ---------------------------------------Paxos_Acceptor----------------------------//
+	private void prepare(int n) {
+		if (n > np) {
+			np = n;
+			// reply <PREPARE_OK,na,va>
+		}
+	}
 
-    private void accept(int n, int v) {
-//		if n >= np then
-//				na = n
-//				va = v
-//				reply with <ACCEPT_OK,n>
-//				send <ACCEPT_OK,na,va > to all learners
-    }
+	private void accept(int n, int v) {
+		if (n >= np) {
+			na = n;
+			va = v;
+			// reply with <ACCEPT_OK,n>
+			// send <ACCEPT_OK,na,va > to all learners
+		}
+	}
 
     // ---------------------------------------Paxos_Leaners----------------------------//
 
-    // receive message ACCEPT_OK from acceptor a
-    private void accepted(int n, int v) {
-//		if n > na
-//		na = n
-//		va = v
-//		aset.reset
-//		else if n < na
-//		return aset.add(a)
-//		if aset is a (majority) quorum
-//		decision = va
-    }
+	// receive message ACCEPT_OK from acceptor a
+	private void accepted(int n, int v) {
+		if (n > na) {
+			na = n;
+			va = v;
+			// asset.reset
+		} else if (n < na) {
+			return;
+		}
+		// if asset is a (majority) quorum
+		decision = va;
+	}
 
     // -----------------------------IncorrectProtocolLogic--------------------------------//
 
