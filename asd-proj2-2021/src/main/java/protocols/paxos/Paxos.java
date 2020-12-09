@@ -75,10 +75,7 @@ public class Paxos extends GenericProtocol {
 	@Override
 	public void init(Properties props) throws HandlerRegistrationException, IOException {
 		// TODO Auto-generated method stub
-
 	}
-
-	// ---------------------------------------Paxos_Proposer----------------------------//
 
 	Comparator<Integer> keyComparator = new Comparator<Integer>() {
 		@Override
@@ -86,6 +83,8 @@ public class Paxos extends GenericProtocol {
 			return Integer.compare(o1, o2);
 		}
 	};
+
+	// ---------------------------------------Paxos_Proposer----------------------------//
 
 	private void propose(int v) {
 //		while(true) do
@@ -223,6 +222,7 @@ public class Paxos extends GenericProtocol {
 		// The AddReplicaRequest contains an "instance" field, which we ignore in this
 		// incorrect protocol.
 		// You should probably take it into account while doing whatever you do here.
+		PaxosInstances.getInstance().addInstance(request.getInstance(), this);
 		membership.add(request.getReplica());
 	}
 
@@ -231,6 +231,7 @@ public class Paxos extends GenericProtocol {
 		// The RemoveReplicaRequest contains an "instance" field, which we ignore in
 		// this incorrect protocol.
 		// You should probably take it into account while doing whatever you do here.
+		PaxosInstances.getInstance().removeInstance(request.getInstance());
 		membership.remove(request.getReplica());
 	}
 

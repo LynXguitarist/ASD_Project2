@@ -6,15 +6,10 @@ import java.util.Map;
 public class PaxosInstances {
 
 	private Map<Integer, Paxos> paxosInstances;
-	private int instanceNumber;
-	
-
 	private static PaxosInstances instance;
 
 	public PaxosInstances() {
 		paxosInstances = new HashMap<>();
-
-		instanceNumber = 0;
 	}
 
 	public static synchronized PaxosInstances getInstance() {
@@ -25,8 +20,12 @@ public class PaxosInstances {
 		return instance;
 	}
 
-	public void addInstance(Paxos paxos) {
+	public void addInstance(int instanceNumber, Paxos paxos) {
 		paxosInstances.put(instanceNumber++, paxos);
+	}
+
+	public void removeInstance(int instanceNumber) {
+		paxosInstances.remove(instanceNumber);
 	}
 
 	public Paxos getPaxosInstance(int instanceNumber) {
