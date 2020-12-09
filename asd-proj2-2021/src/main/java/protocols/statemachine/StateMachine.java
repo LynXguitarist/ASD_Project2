@@ -13,6 +13,7 @@ import protocols.agreement.IncorrectAgreement;
 import protocols.statemachine.notifications.ChannelReadyNotification;
 import protocols.agreement.notifications.DecidedNotification;
 import protocols.agreement.requests.ProposeRequest;
+import protocols.paxos.Paxos;
 import protocols.statemachine.notifications.ExecuteNotification;
 import protocols.statemachine.requests.OrderRequest;
 
@@ -129,14 +130,14 @@ public class StateMachine extends GenericProtocol {
 		if (state == State.JOINING) {
 			// Do something smart (like buffering the requests)
 		} else if (state == State.ACTIVE) {
-			// Also do something starter, we don't want an infinite number of instances
+			// Also do something smart, we don't want an infinite number of instances
 			// active
 			// Maybe you should modify what is it that you are proposing so that you
 			// remember that this
-			// operation was issued by the application (and not an internal operation, chech
+			// operation was issued by the application (and not an internal operation, check
 			// the uponDecidedNotification)
 			sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()),
-					IncorrectAgreement.PROTOCOL_ID);
+					Paxos.PROTOCOL_ID);
 		}
 	}
 
@@ -144,7 +145,7 @@ public class StateMachine extends GenericProtocol {
 	private void uponDecidedNotification(DecidedNotification notification, short sourceProto) {
 		logger.debug("Received notification: " + notification);
 		// Maybe we should make sure operations are executed in order?
-		// You should be careful and check if this operation if an application operation
+		// You should be careful and check if this operation is an application operation
 		// (and send it up)
 		// or if this is an operations that was executed by the state machine itself (in
 		// which case you should execute)
@@ -177,6 +178,14 @@ public class StateMachine extends GenericProtocol {
 		// Also, maybe wait a little bit before retrying, or else you'll be trying 1000s
 		// of times per second
 		// maybe its better to add a timeout
+		
+		try {
+			Thread.sleep(1000);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+		
 		if (membership.contains(event.getNode()))
 			openConnection(event.getNode());
 	}
