@@ -1,16 +1,11 @@
 package protocols.paxos;
 
 import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.List;
 import java.util.Map;
 
 public class PaxosInstances {
 
 	private Map<Integer, Paxos> paxosInstances;
-
-	Map<Integer, Integer> proposals; // <proposal_sn, value>
-
 	private int instanceNumber;
 	
 
@@ -18,7 +13,6 @@ public class PaxosInstances {
 
 	public PaxosInstances() {
 		paxosInstances = new HashMap<>();
-		proposals = new HashMap<>();
 
 		instanceNumber = 0;
 	}
