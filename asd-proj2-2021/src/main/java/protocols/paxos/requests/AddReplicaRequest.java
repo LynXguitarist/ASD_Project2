@@ -27,7 +27,7 @@ public class AddReplicaRequest extends ProtoRequest {
 
     @Override
     public String toString() {
-        return "ProposeRequest{" +
+        return "AddReplicaRequest{" +
                 "instance=" + instance +
                 ", replica=" + replica +
                 '}';

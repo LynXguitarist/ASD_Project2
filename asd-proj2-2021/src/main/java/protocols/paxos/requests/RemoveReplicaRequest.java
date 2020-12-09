@@ -5,7 +5,7 @@ import pt.unl.fct.di.novasys.network.data.Host;
 
 public class RemoveReplicaRequest extends ProtoRequest {
 
-    public static final short REQUEST_ID = 102;
+    public static final short REQUEST_ID = 104;
 
     private final int instance;
     private final Host replica;
@@ -27,7 +27,7 @@ public class RemoveReplicaRequest extends ProtoRequest {
 
     @Override
     public String toString() {
-        return "ProposeRequest{" +
+        return "RemoveReplicaRequest{" +
                 "instance=" + instance +
                 ", replica=" + replica +
                 '}';

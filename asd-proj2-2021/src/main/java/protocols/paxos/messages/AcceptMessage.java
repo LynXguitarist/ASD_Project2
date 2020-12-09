@@ -45,7 +45,7 @@ public class AcceptMessage extends ProtoMessage {
 
     @Override
     public String toString() {
-        return "BroadcastMessage{" +
+        return "AcceptMessage{" +
                 "opId=" + opId +
                 ", instance=" + instance +
                 ", op=" + Hex.encodeHexString(op) +

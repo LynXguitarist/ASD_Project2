@@ -31,7 +31,7 @@ public class Paxos extends GenericProtocol {
 	private static final Logger logger = LogManager.getLogger(Paxos.class);
 
 	// Protocol information, to register in Babel
-	public final static short PROTOCOL_ID = 103;
+	public final static short PROTOCOL_ID = 103 ;
 	public final static String PROTOCOL_NAME = "Paxos";
 
 	private Host myself;

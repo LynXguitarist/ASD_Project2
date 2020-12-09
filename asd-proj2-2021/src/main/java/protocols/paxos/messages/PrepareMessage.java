@@ -39,7 +39,7 @@ public class PrepareMessage extends ProtoMessage {
 
     @Override
     public String toString() {
-        return "BroadcastMessage{" +
+        return "PrepareMessage{" +
                 "opId=" + opId +
                 ", instance=" + instance +
                 ", op=" + Hex.encodeHexString(op) +
