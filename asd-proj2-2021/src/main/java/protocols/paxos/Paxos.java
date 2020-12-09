@@ -8,9 +8,12 @@ import org.apache.logging.log4j.Logger;
 
 import protocols.agreement.messages.BroadcastMessage;
 import protocols.agreement.notifications.DecidedNotification;
+
+
 import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.requests.AddReplicaRequest;
 import protocols.paxos.messages.AcceptMessage;
+import protocols.paxos.requests.DecideRequest;
 import protocols.paxos.requests.ProposeRequest;
 import protocols.agreement.requests.RemoveReplicaRequest;
 import protocols.paxos.messages.PrepareMessage;
@@ -184,6 +187,7 @@ public class Paxos extends GenericProtocol {
 		int proposeValue = -1;
 
 		while (true) {
+			//Aqui mudar pois mapa estará na instance
 			int maxKey = Collections.max(proposals.keySet());
 			int sn = maxKey + 1;
 			proposals.put(sn, request.getInstance());
@@ -191,8 +195,8 @@ public class Paxos extends GenericProtocol {
 					request.getOperation(), sn);
 			membership.forEach(h -> sendMessage(msgPrepare, h));
 
-			long startTime = System.currentTimeMillis(); // fetch starting time
-			while (nrPrepareOk < membership.size() || (System.currentTimeMillis() - startTime) < 10000) {
+			long startTimePrepare = System.currentTimeMillis(); // fetch starting time
+			while (nrPrepareOk < membership.size() || (System.currentTimeMillis() - startTimePrepare) < 10000) {
 			}
 			if (nrPrepareOk >= membership.size()) {
 				if (sna != -1) {
@@ -203,11 +207,19 @@ public class Paxos extends GenericProtocol {
 				AcceptMessage msgAccept = new AcceptMessage(request.getInstance(), request.getOpId(),
 						request.getOperation(), sn, proposeValue);
 				membership.forEach(h -> sendMessage(msgAccept, h));
-				while (nrAcceptOk < membership.size() || (System.currentTimeMillis() - startTime) < 10000) {
+				long startTimeAccept = System.currentTimeMillis(); // fetch starting time
+				while (nrAcceptOk < membership.size() || (System.currentTimeMillis() - startTimeAccept) < 10000) {
 				}
 				if (nrAcceptOk >= membership.size()) {
-					// DECIDE
+					DecideRequest decide = new DecideRequest(request.getInstance(), request.getOpId(),
+							request.getOperation(), proposeValue);
+					//enviar para o cliente
+					break;
+				} else {
+					nrAcceptOk = 0;
 				}
+			} else {
+				nrPrepareOk = 0;
 			}
 			// upon receber prepare ok ele incrementa variavel
 		}
