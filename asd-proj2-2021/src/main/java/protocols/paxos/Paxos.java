@@ -13,6 +13,7 @@ import protocols.agreement.notifications.DecidedNotification;
 import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.requests.AddReplicaRequest;
 import protocols.paxos.messages.AcceptMessage;
+import protocols.paxos.messages.AcceptMessage_OK;
 import protocols.paxos.messages.PrepareMessage_OK;
 import protocols.paxos.requests.DecideRequest;
 import protocols.paxos.requests.ProposeRequest;
@@ -49,11 +50,12 @@ public class Paxos extends GenericProtocol {
 
 	private int newValue = -1;
 
+	private int hal;
 	private int highestPrepare; // highest prepare
 	private int na; // self prepare
 	private int va; // highest accept
 	private int decision; // self decision
-	private int aset; // dunno what is this????
+	private Map<Integer, Integer> aset; // map that learners have of accepted values
 
 	public Paxos(Properties props) throws IOException, HandlerRegistrationException {
 		super(PROTOCOL_NAME, PROTOCOL_ID);
@@ -64,6 +66,7 @@ public class Paxos extends GenericProtocol {
 		na = -1;
 		va = -1;
 		decision = -1;
+		hal=-1;
 		/*--------------------- Register Timer Handlers ----------------------------- */
 
 		/*--------------------- Register Request Handlers ----------------------------- */
@@ -242,7 +245,25 @@ public class Paxos extends GenericProtocol {
 		nrPrepareOk++;
 	}
 
-	private void uponAddReplica(AddReplicaRequest request, short sourceProto) {
+	/* Learner receive this request */
+	private void uponAcceptRequest(AcceptMessage_OK msg, short sourceProto) {
+		int v = msg.getProposeValue();
+		int n = msg.getSeqNumber();
+
+		if (n > hal) {
+			hal = n;
+			va = v;
+			aset.clear();
+		} else if (n == hal) {
+			aset.put(n, v);
+		}
+		if (aset.size() > (membership.size() / 2)) {
+			decision = va;
+			//trigger decide
+
+		}
+	}
+			private void uponAddReplica(AddReplicaRequest request, short sourceProto) {
 		logger.debug("Received " + request);
 		// The AddReplicaRequest contains an "instance" field, which we ignore in this
 		// incorrect protocol.
