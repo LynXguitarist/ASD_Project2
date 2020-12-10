@@ -13,14 +13,16 @@ public class PrepareMessage extends ProtoMessage {
     private final UUID opId;
     private final int instance;
     private final byte[] op;
-    private final int sn;
+    private final int seqNumber;
+    private final int proposeValue;
 
-    public PrepareMessage(int instance, UUID opId, byte[] op, int sn) {
+    public PrepareMessage(int instance, UUID opId, byte[] op, int seqNumber, int proposeValue) {
         super(MSG_ID);
         this.instance = instance;
         this.op = op;
         this.opId = opId;
-        this.sn=sn;
+        this.seqNumber=seqNumber;
+        this.proposeValue = proposeValue;
     }
 
     public int getInstance() {
@@ -35,7 +37,9 @@ public class PrepareMessage extends ProtoMessage {
         return op;
     }
 
-    public int getSn(){ return sn; }
+    public int getSeqNumber(){ return seqNumber; }
+
+    public int getProposeValue(){ return  proposeValue; }
 
     @Override
     public String toString() {
@@ -43,14 +47,16 @@ public class PrepareMessage extends ProtoMessage {
                 "opId=" + opId +
                 ", instance=" + instance +
                 ", op=" + Hex.encodeHexString(op) +
-                ", sn=" + sn +
+                ", seqNumber=" + seqNumber +
+                ", proposeValue=" + proposeValue +
                 '}';
     }
 
     public static ISerializer<PrepareMessage> serializer = new ISerializer<PrepareMessage>() {
         @Override
         public void serialize(PrepareMessage msg, ByteBuf out) {
-            out.writeInt(msg.sn);
+            out.writeInt(msg.seqNumber);
+            out.writeInt(msg.proposeValue);
             out.writeInt(msg.instance);
             out.writeLong(msg.opId.getMostSignificantBits());
             out.writeLong(msg.opId.getLeastSignificantBits());
@@ -61,14 +67,15 @@ public class PrepareMessage extends ProtoMessage {
 
         @Override
         public PrepareMessage deserialize(ByteBuf in) {
-            int sn = in.readInt();
+            int seqNumber = in.readInt();
+            int proposeValue = in.readInt();
             int instance = in.readInt();
             long highBytes = in.readLong();
             long lowBytes = in.readLong();
             UUID opId = new UUID(highBytes, lowBytes);
             byte[] op = new byte[in.readInt()];
             in.readBytes(op);
-            return new PrepareMessage(instance, opId, op, sn);
+            return new PrepareMessage(instance, opId, op, seqNumber, proposeValue);
         }
     };
 

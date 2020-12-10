@@ -12,14 +12,17 @@ public class DecideRequest extends ProtoRequest {
     private final int instance;
     private final UUID opId;
     private final byte[] operation;
-    private final int va;
+    private final int seqNumber;
+    private final int proposeValue;
 
-    public DecideRequest(int instance, UUID opId, byte[] operation, int va) {
+
+    public DecideRequest(int instance, UUID opId, byte[] operation, int seqNumber, int proposeValue) {
         super(REQUEST_ID);
         this.instance = instance;
         this.opId = opId;
         this.operation = operation;
-        this.va = va;
+        this.seqNumber = seqNumber;
+        this.proposeValue = proposeValue;
     }
 
     public int getInstance() {
@@ -34,7 +37,9 @@ public class DecideRequest extends ProtoRequest {
         return opId;
     }
 
-    public int getVa(){ return va; }
+    public int getProposeValue(){ return proposeValue; }
+
+    public int getSeqNumber(){ return seqNumber; }
 
     @Override
     public String toString() {
@@ -42,7 +47,8 @@ public class DecideRequest extends ProtoRequest {
                 "instance=" + instance +
                 ", opId=" + opId +
                 ", operation=" + Hex.encodeHexString(operation) +
-                ", va=" + va +
+                ", proposeValue=" + proposeValue +
+                ", seqNumber=" + seqNumber +
                 '}';
     }
 }

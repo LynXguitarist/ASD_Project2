@@ -13,6 +13,7 @@ import protocols.agreement.notifications.DecidedNotification;
 import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.requests.AddReplicaRequest;
 import protocols.paxos.messages.AcceptMessage;
+import protocols.paxos.messages.PrepareMessage_OK;
 import protocols.paxos.requests.DecideRequest;
 import protocols.paxos.requests.ProposeRequest;
 import protocols.agreement.requests.RemoveReplicaRequest;
@@ -46,9 +47,9 @@ public class Paxos extends GenericProtocol {
 	private int nrPrepareOk = 0;
 	private int nrAcceptOk = 0;
 
-	private int sna = -1;
+	private int newValue = -1;
 
-	private int np; // highest prepare
+	private int highestPrepare; // highest prepare
 	private int na; // self prepare
 	private int va; // highest accept
 	private int decision; // self decision
@@ -59,7 +60,7 @@ public class Paxos extends GenericProtocol {
 		joinedInstance = -1; // -1 means we have not yet joined the system
 		membership = null;
 
-		np = -1;
+		highestPrepare = -1;
 		na = -1;
 		va = -1;
 		decision = -1;
@@ -107,15 +108,19 @@ public class Paxos extends GenericProtocol {
 	}
 
 	// ---------------------------------------Paxos_Acceptor----------------------------//
-	private void prepare(int n) {
-		if (n > np) {
-			np = n;
-			// reply <PREPARE_OK,na,va>
+	private void prepare(int seq, int value) {
+		if (seq > highestPrepare) {
+			highestPrepare = seq;
+			newValue = value;
+		} else {
+			int maxKey = Collections.max(proposals.keySet());
+			newValue = proposals.get(maxKey);
 		}
+		// reply <PREPARE_OK,na,va>
 	}
 
 	private void accept(int n, int v) {
-		if (n >= np) {
+		if (n >= highestPrepare) {
 			na = n;
 			va = v;
 			// reply with <ACCEPT_OK,n>
@@ -154,11 +159,15 @@ public class Paxos extends GenericProtocol {
 		/*---------------------- Register Message Handlers -------------------------- */
 		try {
 			registerMessageHandler(cId, BroadcastMessage.MSG_ID, this::uponBroadcastMessage, this::uponMsgFail);
+			registerMessageHandler(cId, PrepareMessage.MSG_ID, this::uponPrepareMessage, this::uponMsgFail);
+			registerMessageHandler(cId, PrepareMessage_OK.MSG_ID, this::uponPrepareMessage_OK, this::uponMsgFail);
+
 		} catch (HandlerRegistrationException e) {
 			throw new AssertionError("Error registering message handler.", e);
 		}
 
 	}
+
 
 	private void uponBroadcastMessage(BroadcastMessage msg, Host host, short sourceProto, int channelId) {
 		if (joinedInstance >= 0) {
@@ -181,38 +190,35 @@ public class Paxos extends GenericProtocol {
 
 	private void uponProposeRequest(ProposeRequest request, short sourceProto) {
 		logger.debug("Received " + request);
-		// BroadcastMessage msg = new BroadcastMessage(request.getInstance(),
-		// request.getOpId(), request.getOperation());
 		logger.debug("Sending to: " + membership);
 		int proposeValue = -1;
-
 		while (true) {
 			//Aqui mudar pois mapa estará na instance
 			int maxKey = Collections.max(proposals.keySet());
-			int sn = maxKey + 1;
-			proposals.put(sn, request.getInstance());
+			int numberSeq = maxKey + 1;
+			proposals.put(numberSeq, request.getInstance());
 			PrepareMessage msgPrepare = new PrepareMessage(request.getInstance(), request.getOpId(),
-					request.getOperation(), sn);
+					request.getOperation(), numberSeq, request.getVa());
 			membership.forEach(h -> sendMessage(msgPrepare, h));
 
 			long startTimePrepare = System.currentTimeMillis(); // fetch starting time
-			while (nrPrepareOk < membership.size() || (System.currentTimeMillis() - startTimePrepare) < 10000) {
+			while (nrPrepareOk < (membership.size()/2) || (System.currentTimeMillis() - startTimePrepare) < 10000) {
 			}
-			if (nrPrepareOk >= membership.size()) {
-				if (sna != -1) {
-					proposeValue = sna;
+			if (nrPrepareOk >= (membership.size()/2)) {
+				if (newValue != -1) {
+					proposeValue = newValue;
 				} else {
 					proposeValue = request.getVa();
 				}
 				AcceptMessage msgAccept = new AcceptMessage(request.getInstance(), request.getOpId(),
-						request.getOperation(), sn, proposeValue);
+						request.getOperation(), numberSeq, proposeValue);
 				membership.forEach(h -> sendMessage(msgAccept, h));
 				long startTimeAccept = System.currentTimeMillis(); // fetch starting time
-				while (nrAcceptOk < membership.size() || (System.currentTimeMillis() - startTimeAccept) < 10000) {
+				while (nrAcceptOk < (membership.size()/2) || (System.currentTimeMillis() - startTimeAccept) < 10000) {
 				}
-				if (nrAcceptOk >= membership.size()) {
+				if (nrAcceptOk >= (membership.size()/2)) {
 					DecideRequest decide = new DecideRequest(request.getInstance(), request.getOpId(),
-							request.getOperation(), proposeValue);
+							request.getOperation(), numberSeq, proposeValue);
 					//enviar para o cliente
 					break;
 				} else {
@@ -221,12 +227,19 @@ public class Paxos extends GenericProtocol {
 			} else {
 				nrPrepareOk = 0;
 			}
-			// upon receber prepare ok ele incrementa variavel
 		}
 	}
 
-	private void uponPrepareMessage(ProtoMessage protoMessage, Host host, short i, int i1) {
+	private void uponPrepareMessage(PrepareMessage prepareMessage, Host host, short i, int i1) {
+		//vale a pena estar separado?
+		prepare(prepareMessage.getSeqNumber(), prepareMessage.getProposeValue());
+		PrepareMessage_OK msgAccept = new PrepareMessage_OK(prepareMessage.getInstance(), prepareMessage.getOpId(), prepareMessage.getOp(), highestPrepare, newValue);
+		//AQUI ENVIAR PARA QUEM ME ENVIOU
+	}
 
+	private void uponPrepareMessage_OK(PrepareMessage_OK prepareMessage_OK, Host host, short i, int i1) {
+		//TODO
+		nrPrepareOk++;
 	}
 
 	private void uponAddReplica(AddReplicaRequest request, short sourceProto) {
