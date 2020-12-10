@@ -234,7 +234,7 @@ public class Paxos extends GenericProtocol {
 		//vale a pena estar separado?
 		prepare(prepareMessage.getSeqNumber(), prepareMessage.getProposeValue());
 		PrepareMessage_OK msgAccept = new PrepareMessage_OK(prepareMessage.getInstance(), prepareMessage.getOpId(), prepareMessage.getOp(), highestPrepare, newValue);
-		//AQUI ENVIAR PARA QUEM ME ENVIOU
+		//AQUI ENVIAR PARA QUEM ME ENVIOU!
 	}
 
 	private void uponPrepareMessage_OK(PrepareMessage_OK prepareMessage_OK, Host host, short i, int i1) {
