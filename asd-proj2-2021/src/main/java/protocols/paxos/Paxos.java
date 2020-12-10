@@ -3,6 +3,7 @@ package protocols.paxos;
 import java.io.IOException;
 import java.util.*;
 
+import javafx.util.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
@@ -50,24 +51,25 @@ public class Paxos extends GenericProtocol {
 
     private int newValue = -1;
 
-    private int hal;
-    private int highestPrepare; // highest prepare
-    private int na; // self prepare
-    private int va; // highest accept
-    private int decision; // self decision
-    private Map<Integer, Integer> aset; // map that learners have of accepted values
+	private int hal;
+	private int highestPrepare; // highest prepare
+	private int na; // self prepare
+	private int va; // highest accept
+	private int decision; // self decision
+	private Set<Pair> aset; // map that learners have of accepted values
 
     public Paxos(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
         joinedInstance = -1; // -1 means we have not yet joined the system
         membership = null;
 
-        highestPrepare = -1;
-        na = -1;
-        va = -1;
-        decision = -1;
-        hal = -1;
-        /*--------------------- Register Timer Handlers ----------------------------- */
+		aset = new HashSet<>();
+		highestPrepare = -1;
+		na = -1;
+		va = -1;
+		decision = -1;
+		hal=-1;
+		/*--------------------- Register Timer Handlers ----------------------------- */
 
         /*--------------------- Register Request Handlers ----------------------------- */
         registerRequestHandler(ProposeRequest.REQUEST_ID, this::uponProposeRequest);
@@ -248,23 +250,21 @@ public class Paxos extends GenericProtocol {
         nrPrepareOk++;
     }
 
-    /**
-     * Learner receive this message
-     */
-    private void uponAcceptMessage_OK(AcceptMessage_OK msg, Host host, short sourceProto, int channelId) {
-        int v = msg.getProposeValue();
-        int n = msg.getSeqNumber();
+	/** Learner receive this message */
+	private void uponAcceptMessage_OK(AcceptMessage_OK msg, Host host, short sourceProto, int channelId) {
+		int v = msg.getProposeValue();
+		int n = msg.getSeqNumber();
 
-        if (n > hal) {
-            hal = n;
-            va = v;
-            aset.clear();
-        } else if (n == hal) {
-            aset.put(n, v);
-        }
-        if (aset.size() > (membership.size() / 2)) {
-            decision = va;
-            //trigger decide
+		if (n > hal) {
+			hal = n;
+			va = v;
+			aset.clear();
+		} else if (n == hal) {
+			aset.add(new Pair(n, v));
+		}
+		if (aset.size() > (membership.size() / 2)) {
+			decision = va;
+			//trigger decide
 
         }
     }
