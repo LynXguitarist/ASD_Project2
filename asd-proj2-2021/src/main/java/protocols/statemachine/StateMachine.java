@@ -178,18 +178,17 @@ public class StateMachine extends GenericProtocol {
 		// Also, maybe wait a little bit before retrying, or else you'll be trying 1000s
 		// of times per second
 		// maybe its better to add a timeout
-		
+
 		try {
 			Thread.sleep(1000);
 		} catch (InterruptedException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		
-		if (membership.contains(event.getNode()))
+		long startTime = System.currentTimeMillis(); /** trying to reconnect for 5s */
+		while (membership.contains(event.getNode()) && (System.currentTimeMillis() - startTime) < 5000) {
 			openConnection(event.getNode());
+		}
 	}
-
 	private void uponInConnectionUp(InConnectionUp event, int channelId) {
 		logger.trace("Connection from {} is up", event.getNode());
 	}

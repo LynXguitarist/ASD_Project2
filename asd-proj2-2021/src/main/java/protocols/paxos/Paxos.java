@@ -164,6 +164,7 @@ public class Paxos extends GenericProtocol {
 			registerMessageHandler(cId, BroadcastMessage.MSG_ID, this::uponBroadcastMessage, this::uponMsgFail);
 			registerMessageHandler(cId, PrepareMessage.MSG_ID, this::uponPrepareMessage, this::uponMsgFail);
 			registerMessageHandler(cId, PrepareMessage_OK.MSG_ID, this::uponPrepareMessage_OK, this::uponMsgFail);
+			registerMessageHandler(cId, AcceptMessage_OK.MSG_ID, this::uponAcceptMessage_OK, this::uponMsgFail);
 
 		} catch (HandlerRegistrationException e) {
 			throw new AssertionError("Error registering message handler.", e);
@@ -245,8 +246,8 @@ public class Paxos extends GenericProtocol {
 		nrPrepareOk++;
 	}
 
-	/* Learner receive this request */
-	private void uponAcceptRequest(AcceptMessage_OK msg, short sourceProto) {
+	/** Learner receive this message */
+	private void uponAcceptMessage_OK(AcceptMessage_OK msg, Host host, short sourceProto, int channelId) {
 		int v = msg.getProposeValue();
 		int n = msg.getSeqNumber();
 
