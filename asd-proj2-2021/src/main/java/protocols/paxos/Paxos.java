@@ -56,7 +56,7 @@ public class Paxos extends GenericProtocol {
 	private int na; // self prepare
 	private int va; // highest accept
 	private int decision; // self decision
-	private Set<Pair> aset; // map that learners have of accepted values
+	private Set<Pair<Integer,Integer>> aset; // map that learners have of accepted values
 
     public Paxos(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
