@@ -134,7 +134,7 @@ public class StateMachine extends GenericProtocol {
 			// Do something smart (like buffering the requests)
 			pendingRequests.add(request); 
 			// where to send after... when Active, see if queue is empty
-			// or when connectionUp
+			// or when connectionUp 
 		} else if (state == State.ACTIVE) {
 			// Also do something smart, we don't want an infinite number of instances
 			// active
