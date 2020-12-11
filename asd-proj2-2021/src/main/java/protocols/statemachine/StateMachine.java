@@ -22,6 +22,8 @@ import java.net.UnknownHostException;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Properties;
+import java.util.Queue;
+import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * This is NOT fully functional StateMachine implementation. This is simply an
@@ -39,7 +41,7 @@ public class StateMachine extends GenericProtocol {
 	private static final Logger logger = LogManager.getLogger(StateMachine.class);
 
 	private enum State {
-		JOINING, ACTIVE
+		JOINING, ACTIVE, INACTIVE
 	}
 
 	// Protocol information, to register in babel
@@ -51,6 +53,7 @@ public class StateMachine extends GenericProtocol {
 
 	private State state;
 	private List<Host> membership;
+	private Queue<OrderRequest> pendingRequests;
 	private int nextInstance;
 
 	public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
@@ -62,6 +65,7 @@ public class StateMachine extends GenericProtocol {
 
 		logger.info("Listening on {}:{}", address, port);
 		this.self = new Host(InetAddress.getByName(address), Integer.parseInt(port));
+		this.pendingRequests = new LinkedBlockingQueue<>();
 
 		Properties channelProps = new Properties();
 		channelProps.setProperty(TCPChannel.ADDRESS_KEY, address);
@@ -109,7 +113,7 @@ public class StateMachine extends GenericProtocol {
 			state = State.ACTIVE;
 			logger.info("Starting in ACTIVE as I am part of initial membership");
 			// I'm part of the initial membership, so I'm assuming the system is
-			// bootstraping
+			// Bootstrapping
 			membership = new LinkedList<>(initialMembership);
 			membership.forEach(this::openConnection);
 			triggerNotification(new JoinedNotification(membership, 0));
@@ -128,6 +132,9 @@ public class StateMachine extends GenericProtocol {
 		logger.debug("Received request: " + request);
 		if (state == State.JOINING) {
 			// Do something smart (like buffering the requests)
+			pendingRequests.add(request); 
+			// where to send after... when Active, see if queue is empty
+			// or when connectionUp
 		} else if (state == State.ACTIVE) {
 			// Also do something smart, we don't want an infinite number of instances
 			// active
@@ -164,6 +171,7 @@ public class StateMachine extends GenericProtocol {
 	 */
 	private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
 		logger.info("Connection to {} is up", event.getNode());
+		
 	}
 
 	private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
