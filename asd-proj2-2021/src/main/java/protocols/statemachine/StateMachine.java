@@ -9,7 +9,6 @@ import pt.unl.fct.di.novasys.channel.tcp.events.*;
 import pt.unl.fct.di.novasys.network.data.Host;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
-import protocols.agreement.IncorrectAgreement;
 import protocols.statemachine.notifications.ChannelReadyNotification;
 import protocols.agreement.notifications.DecidedNotification;
 import protocols.agreement.requests.ProposeRequest;
@@ -179,16 +178,21 @@ public class StateMachine extends GenericProtocol {
 		// of times per second
 		// maybe its better to add a timeout
 
-		try {
-			Thread.sleep(1000);
-		} catch (InterruptedException e) {
-			e.printStackTrace();
-		}
-		long startTime = System.currentTimeMillis(); /** trying to reconnect for 5s */
-		while (membership.contains(event.getNode()) && (System.currentTimeMillis() - startTime) < 5000) {
-			openConnection(event.getNode());
+		short retries = 0;
+		while (retries < 5) {
+			if (membership.contains(event.getNode())) {
+				logger.info("Connection to {} restored!", event.getNode());
+				openConnection(event.getNode());
+				break;
+			}
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
 		}
 	}
+
 	private void uponInConnectionUp(InConnectionUp event, int channelId) {
 		logger.trace("Connection from {} is up", event.getNode());
 	}
