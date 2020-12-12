@@ -4,11 +4,12 @@ import io.netty.buffer.ByteBuf;
 import org.apache.commons.codec.binary.Hex;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
 import pt.unl.fct.di.novasys.network.ISerializer;
+
 import java.util.UUID;
 
-public class PrepareMessage_OK extends ProtoMessage {
+public class AcceptMessage_LOK extends ProtoMessage {
 
-    public final static short MSG_ID = 103;
+    public final static short MSG_ID = 105;
 
     private final UUID opId;
     private final int instance;
@@ -16,13 +17,14 @@ public class PrepareMessage_OK extends ProtoMessage {
     private final int seqNumber;
     private final UUID proposeValue;
 
-    public PrepareMessage_OK(int instance, UUID opId, byte[] op, int seqNumber, UUID proposeValue) {
+    public AcceptMessage_LOK(int instance, UUID opId, byte[] op, int seqNumber, UUID proposeValue) {
         super(MSG_ID);
         this.instance = instance;
         this.op = op;
         this.opId = opId;
-        this.seqNumber=seqNumber;
-        this.proposeValue=proposeValue;
+        this.seqNumber = seqNumber;
+        this.proposeValue = proposeValue;
+
     }
 
     public int getInstance() {
@@ -41,9 +43,10 @@ public class PrepareMessage_OK extends ProtoMessage {
 
     public UUID getProposeValue() { return proposeValue; }
 
+
     @Override
     public String toString() {
-        return "PrepareMessage_OK{" +
+        return "AcceptMessage_LOK{" +
                 "opId=" + opId +
                 ", instance=" + instance +
                 ", op=" + Hex.encodeHexString(op) +
@@ -52,9 +55,9 @@ public class PrepareMessage_OK extends ProtoMessage {
                 '}';
     }
 
-    public static ISerializer<PrepareMessage_OK> serializer = new ISerializer<PrepareMessage_OK>() {
+    public static ISerializer<AcceptMessage_LOK> serializer = new ISerializer<AcceptMessage_LOK>() {
         @Override
-        public void serialize(PrepareMessage_OK msg, ByteBuf out) {
+        public void serialize(AcceptMessage_LOK msg, ByteBuf out) {
             out.writeInt(msg.seqNumber);
             out.writeLong(msg.proposeValue.getMostSignificantBits());
             out.writeLong(msg.proposeValue.getLeastSignificantBits());
@@ -66,7 +69,7 @@ public class PrepareMessage_OK extends ProtoMessage {
         }
 
         @Override
-        public PrepareMessage_OK deserialize(ByteBuf in) {
+        public AcceptMessage_LOK deserialize(ByteBuf in) {
             int seqNumber = in.readInt();
             long highProposeValue = in.readLong();
             long lowProposeValue = in.readLong();
@@ -77,7 +80,7 @@ public class PrepareMessage_OK extends ProtoMessage {
             UUID opId = new UUID(highBytes, lowBytes);
             byte[] op = new byte[in.readInt()];
             in.readBytes(op);
-            return new PrepareMessage_OK(instance, opId, op, seqNumber, proposalValue);
+            return new AcceptMessage_LOK(instance, opId, op, seqNumber, proposalValue);
         }
     };
 

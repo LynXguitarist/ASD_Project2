@@ -12,14 +12,14 @@ public class ProposeRequest extends ProtoRequest {
     private final int instance;
     private final UUID opId;
     private final byte[] operation;
-    private final int va;
 
-    public ProposeRequest(int instance, UUID opId, byte[] operation, int va) {
+
+    public ProposeRequest(int instance, UUID opId, byte[] operation) {
         super(REQUEST_ID);
         this.instance = instance;
         this.opId = opId;
         this.operation = operation;
-        this.va = va;
+
     }
 
     public int getInstance() {
@@ -34,15 +34,12 @@ public class ProposeRequest extends ProtoRequest {
         return opId;
     }
 
-    public int getVa(){ return va; }
-
     @Override
     public String toString() {
         return "ProposeRequest{" +
                 "instance=" + instance +
                 ", opId=" + opId +
                 ", operation=" + Hex.encodeHexString(operation) +
-                ", va=" + va +
                 '}';
     }
 }

@@ -13,13 +13,10 @@ import protocols.agreement.notifications.DecidedNotification;
 
 import protocols.agreement.notifications.JoinedNotification;
 import protocols.agreement.requests.AddReplicaRequest;
-import protocols.paxos.messages.AcceptMessage;
-import protocols.paxos.messages.AcceptMessage_OK;
-import protocols.paxos.messages.PrepareMessage_OK;
+import protocols.paxos.messages.*;
 import protocols.paxos.requests.DecideRequest;
 import protocols.paxos.requests.ProposeRequest;
 import protocols.agreement.requests.RemoveReplicaRequest;
-import protocols.paxos.messages.PrepareMessage;
 import protocols.statemachine.notifications.ChannelReadyNotification;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
@@ -44,32 +41,32 @@ public class Paxos extends GenericProtocol {
     private int joinedInstance;
     private List<Host> membership;
 
-    private Map<Integer, Integer> proposals; // <proposal_sn, value>
+    private Map<Integer, UUID> proposals; // <proposal_sn, value>
 
     private int nrPrepareOk = 0;
     private int nrAcceptOk = 0;
 
-    private int newValue = -1;
+    private UUID newValue = null;
 
-	private int hal;
-	private int highestPrepare; // highest prepare
-	private int na; // self prepare
-	private int va; // highest accept
-	private int decision; // self decision
-	private Set<Pair<Integer,Integer>> aset; // map that learners have of accepted values
+    private int hal;
+    private int highestPrepare; // highest prepare
+    private int na; // self prepare
+    private UUID va; // value
+    private UUID decision; // self decision
+    private Set<Pair<Integer, UUID>> aset; // map that learners have of accepted values
 
     public Paxos(Properties props) throws IOException, HandlerRegistrationException {
         super(PROTOCOL_NAME, PROTOCOL_ID);
         joinedInstance = -1; // -1 means we have not yet joined the system
         membership = null;
 
-		aset = new HashSet<>();
-		highestPrepare = -1;
-		na = -1;
-		va = -1;
-		decision = -1;
-		hal=-1;
-		/*--------------------- Register Timer Handlers ----------------------------- */
+        aset = new HashSet<>();
+        highestPrepare = -1;
+        na = -1;
+        va = null;
+        decision = null;
+        hal = -1;
+        /*--------------------- Register Timer Handlers ----------------------------- */
 
         /*--------------------- Register Request Handlers ----------------------------- */
         registerRequestHandler(ProposeRequest.REQUEST_ID, this::uponProposeRequest);
@@ -82,8 +79,8 @@ public class Paxos extends GenericProtocol {
     }
 
     @Override
-    public void init(Properties props) throws HandlerRegistrationException, IOException {
-        // TODO Auto-generated method stub
+    public void init(Properties props) {
+        //Nothing to do here, we just wait for events from the application or agreement
     }
 
     Comparator<Integer> keyComparator = new Comparator<Integer>() {
@@ -93,27 +90,11 @@ public class Paxos extends GenericProtocol {
         }
     };
 
-    // ---------------------------------------Paxos_Proposer----------------------------//
 
-    private void propose(int v) {
-//		while(true) do
-//			choose unique sn , higher than any n seen so far
-//			send PREPARE(sn) to all acceptors
-//			if PREPARE_OK(sna , va) from majority then
-//			       va = va with highest sna (or choose v otherwise)
-//			    send ACCEPT (sn , va) to all acceptors
-//			    if ACCEPT_OK(n) from majority then
-//			        send DECIDED(va ) to client
-//			        break
-//			    else //timeout on waiting ACCEPT_OK
-//			        continue in while
-//			else //timeout on waiting PREPARE_OK
-//			continue in while
 
-    }
 
     // ---------------------------------------Paxos_Acceptor----------------------------//
-    private void prepare(int seq, int value) {
+    private void prepare(int seq, UUID value) {
         if (seq > highestPrepare) {
             highestPrepare = seq;
             newValue = value;
@@ -124,10 +105,10 @@ public class Paxos extends GenericProtocol {
         // reply <PREPARE_OK,na,va>
     }
 
-    private void accept(int seq, int value) {
+    private void accept(int seq, UUID value) {
         if (seq >= highestPrepare) {
-            //na = seq;
-            //va = value;
+            na = seq;
+            va = value;
             highestPrepare = seq;
             newValue = value;
             // reply with <ACCEPT_OK,n>
@@ -138,7 +119,7 @@ public class Paxos extends GenericProtocol {
     // ---------------------------------------Paxos_Leaners----------------------------//
 
     // receive message ACCEPT_OK from acceptor a
-    private void accepted(int n, int v) {
+    private void accepted(int n, UUID v) {
         if (n > na) {
             na = n;
             va = v;
@@ -154,22 +135,27 @@ public class Paxos extends GenericProtocol {
 
     // Upon receiving the channelId from the membership, register our own callbacks
     // and serializers
-    // --!--!--!--!-- DÁ PARA APROVEITAR MENOS O BroadcastMessage --!--!--!--!-
     private void uponChannelCreated(ChannelReadyNotification notification, short sourceProto) {
         int cId = notification.getChannelId();
         myself = notification.getMyself();
         logger.info("Channel {} created, I am {}", cId, myself);
         // Allows this protocol to receive events from this channel.
         registerSharedChannel(cId);
+
         /*---------------------- Register Message Serializers ---------------------- */
-        registerMessageSerializer(cId, BroadcastMessage.MSG_ID, BroadcastMessage.serializer);
+        registerMessageSerializer(cId, PrepareMessage.MSG_ID, PrepareMessage.serializer);
+        registerMessageSerializer(cId, PrepareMessage_OK.MSG_ID, PrepareMessage_OK.serializer);
+        registerMessageSerializer(cId, AcceptMessage.MSG_ID, AcceptMessage.serializer);
+        registerMessageSerializer(cId, AcceptMessage_OK.MSG_ID, AcceptMessage_OK.serializer);
+        registerMessageSerializer(cId, AcceptMessage_LOK.MSG_ID, AcceptMessage_LOK.serializer);
+
         /*---------------------- Register Message Handlers -------------------------- */
         try {
-            registerMessageHandler(cId, BroadcastMessage.MSG_ID, this::uponBroadcastMessage, this::uponMsgFail);
             registerMessageHandler(cId, PrepareMessage.MSG_ID, this::uponPrepareMessage, this::uponMsgFail);
             registerMessageHandler(cId, PrepareMessage_OK.MSG_ID, this::uponPrepareMessage_OK, this::uponMsgFail);
             registerMessageHandler(cId, AcceptMessage.MSG_ID, this::uponAcceptMessage, this::uponMsgFail);
             registerMessageHandler(cId, AcceptMessage_OK.MSG_ID, this::uponAcceptMessage_OK, this::uponMsgFail);
+            registerMessageHandler(cId, AcceptMessage_LOK.MSG_ID, this::uponAcceptMessage_LOK, this::uponMsgFail);
 
         } catch (HandlerRegistrationException e) {
             throw new AssertionError("Error registering message handler.", e);
@@ -196,27 +182,29 @@ public class Paxos extends GenericProtocol {
         logger.info("Agreement starting at instance {},  membership: {}", joinedInstance, membership);
     }
 
+    // ---------------------------------------Paxos_Proposer----------------------------//
+
     private void uponProposeRequest(ProposeRequest request, short sourceProto) {
         logger.debug("Received " + request);
         logger.debug("Sending to: " + membership);
-        int proposeValue = -1;
+        UUID proposeValue = null;
         while (true) {
             //Aqui mudar pois mapa estará na instance
             int maxKey = Collections.max(proposals.keySet());
             int numberSeq = maxKey + 1;
-            proposals.put(numberSeq, request.getInstance());
+            proposals.put(numberSeq, request.getOpId());
             PrepareMessage msgPrepare = new PrepareMessage(request.getInstance(), request.getOpId(),
-                    request.getOperation(), numberSeq, request.getVa());
+                    request.getOperation(), numberSeq, proposeValue );
             membership.forEach(h -> sendMessage(msgPrepare, h));
 
             long startTimePrepare = System.currentTimeMillis(); // fetch starting time
             while (nrPrepareOk < (membership.size() / 2) || (System.currentTimeMillis() - startTimePrepare) < 10000) {
             }
             if (nrPrepareOk >= (membership.size() / 2)) {
-                if (newValue != -1) {
+                if (newValue != null) {
                     proposeValue = newValue;
                 } else {
-                    proposeValue = request.getVa();
+                    proposeValue = request.getOpId();
                 }
                 AcceptMessage msgAccept = new AcceptMessage(request.getInstance(), request.getOpId(),
                         request.getOperation(), numberSeq, proposeValue);
@@ -226,7 +214,7 @@ public class Paxos extends GenericProtocol {
                 }
                 if (nrAcceptOk >= (membership.size() / 2)) {
                     DecideRequest decide = new DecideRequest(request.getInstance(), request.getOpId(),
-                            request.getOperation(), numberSeq, proposeValue);
+                            request.getOperation(), numberSeq);
                     //enviar para o cliente
                     break;
                 } else {
@@ -250,21 +238,43 @@ public class Paxos extends GenericProtocol {
         nrPrepareOk++;
     }
 
-	/** Learner receive this message */
-	private void uponAcceptMessage_OK(AcceptMessage_OK msg, Host host, short sourceProto, int channelId) {
-		int v = msg.getProposeValue();
-		int n = msg.getSeqNumber();
+    /**
+     * Learner receive this message
+     */
+    private void uponAcceptMessage_LOK(AcceptMessage_OK msg, Host host, short sourceProto, int channelId) {
+        UUID v = msg.getProposeValue();
+        int n = msg.getSeqNumber();
 
-		if (n > hal) {
-			hal = n;
-			va = v;
-			aset.clear();
-		} else if (n == hal) {
-			aset.add(new Pair(n, v));
-		}
-		if (aset.size() > (membership.size() / 2)) {
-			decision = va;
-			//trigger decide
+        if (n > hal) {
+            hal = n;
+            va = v;
+            aset.clear();
+        } else if (n == hal) {
+            aset.add(new Pair(n, v));
+        }
+        if (aset.size() > (membership.size() / 2)) {
+            decision = va;
+            triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
+        }
+    }
+
+    /**
+     * Proposer receive this message
+     */
+    private void uponAcceptMessage_OK(AcceptMessage_OK msg, Host host, short sourceProto, int channelId) {
+        UUID v = msg.getProposeValue();
+        int n = msg.getSeqNumber();
+
+        if (n > hal) {
+            hal = n;
+            va = v;
+            aset.clear();
+        } else if (n == hal) {
+            aset.add(new Pair(n, v));
+        }
+        if (aset.size() > (membership.size() / 2)) {
+            decision = va;
+            //trigger decide
 
         }
     }
@@ -272,7 +282,6 @@ public class Paxos extends GenericProtocol {
     private void uponAcceptMessage(AcceptMessage acceptMessage, Host host, short i, int i1) {
 
     }
-
 
     private void uponAddReplica(AddReplicaRequest request, short sourceProto) {
         logger.debug("Received " + request);

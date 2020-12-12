@@ -13,16 +13,14 @@ public class DecideRequest extends ProtoRequest {
     private final UUID opId;
     private final byte[] operation;
     private final int seqNumber;
-    private final int proposeValue;
 
 
-    public DecideRequest(int instance, UUID opId, byte[] operation, int seqNumber, int proposeValue) {
+    public DecideRequest(int instance, UUID opId, byte[] operation, int seqNumber) {
         super(REQUEST_ID);
         this.instance = instance;
         this.opId = opId;
         this.operation = operation;
         this.seqNumber = seqNumber;
-        this.proposeValue = proposeValue;
     }
 
     public int getInstance() {
@@ -37,8 +35,6 @@ public class DecideRequest extends ProtoRequest {
         return opId;
     }
 
-    public int getProposeValue(){ return proposeValue; }
-
     public int getSeqNumber(){ return seqNumber; }
 
     @Override
@@ -47,7 +43,6 @@ public class DecideRequest extends ProtoRequest {
                 "instance=" + instance +
                 ", opId=" + opId +
                 ", operation=" + Hex.encodeHexString(operation) +
-                ", proposeValue=" + proposeValue +
                 ", seqNumber=" + seqNumber +
                 '}';
     }

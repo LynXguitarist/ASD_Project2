@@ -15,9 +15,9 @@ public class AcceptMessage extends ProtoMessage {
     private final int instance;
     private final byte[] op;
     private final int seqNumber;
-    private final int proposeValue;
+    private final UUID proposeValue;
 
-    public AcceptMessage(int instance, UUID opId, byte[] op, int seqNumber, int proposeValue) {
+    public AcceptMessage(int instance, UUID opId, byte[] op, int seqNumber, UUID proposeValue) {
         super(MSG_ID);
         this.instance = instance;
         this.op = op;
@@ -41,7 +41,7 @@ public class AcceptMessage extends ProtoMessage {
 
     public int getSeqNumber(){ return seqNumber; }
 
-    public int getProposeValue() { return proposeValue; }
+    public UUID getProposeValue() { return proposeValue; }
 
     @Override
     public String toString() {
@@ -58,7 +58,8 @@ public class AcceptMessage extends ProtoMessage {
         @Override
         public void serialize(AcceptMessage msg, ByteBuf out) {
             out.writeInt(msg.seqNumber);
-            out.writeInt(msg.proposeValue);
+            out.writeLong(msg.proposeValue.getMostSignificantBits());
+            out.writeLong(msg.proposeValue.getLeastSignificantBits());
             out.writeInt(msg.instance);
             out.writeLong(msg.opId.getMostSignificantBits());
             out.writeLong(msg.opId.getLeastSignificantBits());
@@ -69,14 +70,16 @@ public class AcceptMessage extends ProtoMessage {
         @Override
         public AcceptMessage deserialize(ByteBuf in) {
             int seqNumber = in.readInt();
-            int proposeValue = in.readInt();
+            long highProposeValue = in.readLong();
+            long lowProposeValue = in.readLong();
+            UUID proposalValue = new UUID(highProposeValue, lowProposeValue);
             int instance = in.readInt();
             long highBytes = in.readLong();
             long lowBytes = in.readLong();
             UUID opId = new UUID(highBytes, lowBytes);
             byte[] op = new byte[in.readInt()];
             in.readBytes(op);
-            return new AcceptMessage(instance, opId, op, seqNumber, proposeValue);
+            return new AcceptMessage(instance, opId, op, seqNumber, proposalValue);
         }
     };
 
