@@ -5,7 +5,8 @@ import java.util.Map;
 
 public class PaxosInstances {
 
-	private Map<Integer, Paxos> paxosInstances;
+	/** Map with key number of instance and value state of replica */
+	private Map<Integer,PaxosState> paxosInstances;
 	private static PaxosInstances instance;
 
 	public PaxosInstances() {
@@ -20,15 +21,14 @@ public class PaxosInstances {
 		return instance;
 	}
 
-	public void addInstance(int instanceNumber, Paxos paxos) {
-		paxosInstances.put(instanceNumber++, paxos);
+	public void addInstance(int instanceNumber, PaxosState state) { paxosInstances.put(instanceNumber, state);
 	}
 
 	public void removeInstance(int instanceNumber) {
 		paxosInstances.remove(instanceNumber);
 	}
 
-	public Paxos getPaxosInstance(int instanceNumber) {
+	public PaxosState getPaxosInstance(int instanceNumber) {
 		return paxosInstances.get(instanceNumber);
 	}
 

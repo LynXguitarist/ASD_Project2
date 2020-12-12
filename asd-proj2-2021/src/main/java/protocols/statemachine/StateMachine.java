@@ -1,6 +1,8 @@
 package protocols.statemachine;
 
 import protocols.agreement.notifications.JoinedNotification;
+import protocols.paxos.PaxosInstances;
+import protocols.paxos.PaxosState;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
@@ -40,6 +42,9 @@ import java.util.concurrent.LinkedBlockingQueue;
 public class StateMachine extends GenericProtocol {
 	private static final Logger logger = LogManager.getLogger(StateMachine.class);
 
+	//Replica id
+	public static int REPLICA_ID;
+
 	private enum State {
 		JOINING, ACTIVE, INACTIVE
 	}
@@ -66,6 +71,8 @@ public class StateMachine extends GenericProtocol {
 		logger.info("Listening on {}:{}", address, port);
 		this.self = new Host(InetAddress.getByName(address), Integer.parseInt(port));
 		this.pendingRequests = new LinkedBlockingQueue<>();
+
+		REPLICA_ID = self.getPort(); //port number will be the replica ID
 
 		Properties channelProps = new Properties();
 		channelProps.setProperty(TCPChannel.ADDRESS_KEY, address);
@@ -142,7 +149,9 @@ public class StateMachine extends GenericProtocol {
 			// remember that this
 			// operation was issued by the application (and not an internal operation, check
 			// the uponDecidedNotification)
-			sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()),
+			pendingRequests.add(request);
+			OrderRequest orderRequest = pendingRequests.remove();
+			sendRequest(new ProposeRequest(nextInstance++, orderRequest.getOpId(), orderRequest.getOperation()),
 					Paxos.PROTOCOL_ID);
 		}
 	}
@@ -156,6 +165,17 @@ public class StateMachine extends GenericProtocol {
 		// or if this is an operations that was executed by the state machine itself (in
 		// which case you should execute)
 		triggerNotification(new ExecuteNotification(notification.getOpId(), notification.getOperation()));
+
+		if (state == State.ACTIVE) {
+			nextInstance++;
+			PaxosInstances.getInstance().addInstance(nextInstance,new PaxosState(nextInstance));
+
+			OrderRequest orderRequest = pendingRequests.remove();
+			sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), orderRequest.getOperation()),
+					Paxos.PROTOCOL_ID);
+
+
+		}
 	}
 
 	/*--------------------------------- Messages ---------------------------------------- */

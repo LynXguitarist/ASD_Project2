@@ -39,6 +39,7 @@ public class HashApp extends GenericProtocol {
     private byte[] cumulativeHash;
     private final Map<UUID, Pair<Host, Long>> clientIdMapper;
 
+
     public HashApp(Properties properties) throws HandlerRegistrationException, IOException {
         super(PROTO_NAME, PROTO_ID);
 

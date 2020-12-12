@@ -7,7 +7,6 @@ import javafx.util.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import protocols.agreement.messages.BroadcastMessage;
 import protocols.agreement.notifications.DecidedNotification;
 
 
@@ -40,6 +39,7 @@ public class Paxos extends GenericProtocol {
     private Host myself;
     private int joinedInstance;
     private List<Host> membership;
+    private int MEMBERSHIP_SIZE;
 
     private Map<Integer, UUID> proposals; // <proposal_sn, value>
 
@@ -60,12 +60,6 @@ public class Paxos extends GenericProtocol {
         joinedInstance = -1; // -1 means we have not yet joined the system
         membership = null;
 
-        aset = new HashSet<>();
-        highestPrepare = -1;
-        na = -1;
-        va = null;
-        decision = null;
-        hal = -1;
         /*--------------------- Register Timer Handlers ----------------------------- */
 
         /*--------------------- Register Request Handlers ----------------------------- */
@@ -89,9 +83,6 @@ public class Paxos extends GenericProtocol {
             return Integer.compare(o1, o2);
         }
     };
-
-
-
 
     // ---------------------------------------Paxos_Acceptor----------------------------//
     private void prepare(int seq, UUID value) {
@@ -162,7 +153,7 @@ public class Paxos extends GenericProtocol {
         }
 
     }
-
+/*
     private void uponBroadcastMessage(BroadcastMessage msg, Host host, short sourceProto, int channelId) {
         if (joinedInstance >= 0) {
             // Obviously your agreement protocols will not decide things as soon as you
@@ -174,11 +165,12 @@ public class Paxos extends GenericProtocol {
             // agreement instances, maybe we should do something with them...?
         }
     }
-
+*/
     private void uponJoinedNotification(JoinedNotification notification, short sourceProto) {
         // We joined the system and can now start doing things
         joinedInstance = notification.getJoinInstance();
         membership = new LinkedList<>(notification.getMembership());
+        MEMBERSHIP_SIZE = membership.size();
         logger.info("Agreement starting at instance {},  membership: {}", joinedInstance, membership);
     }
 
@@ -187,11 +179,16 @@ public class Paxos extends GenericProtocol {
     private void uponProposeRequest(ProposeRequest request, short sourceProto) {
         logger.debug("Received " + request);
         logger.debug("Sending to: " + membership);
+        PaxosState ps = PaxosInstances.getInstance().getPaxosInstance(request.getInstance());
+        installState(ps);
+
         UUID proposeValue = null;
         while (true) {
             //Aqui mudar pois mapa estará na instance
-            int maxKey = Collections.max(proposals.keySet());
-            int numberSeq = maxKey + 1;
+           // int maxKey = Collections.max(proposals.keySet());
+
+            int numberSeq = ps.getSequenceNumber() + MEMBERSHIP_SIZE;
+
             proposals.put(numberSeq, request.getOpId());
             PrepareMessage msgPrepare = new PrepareMessage(request.getInstance(), request.getOpId(),
                     request.getOperation(), numberSeq, proposeValue );
@@ -224,6 +221,21 @@ public class Paxos extends GenericProtocol {
                 nrPrepareOk = 0;
             }
         }
+    }
+
+    private void installState(PaxosState ps) {
+
+        nrPrepareOk = ps.getPrepareOk();
+         nrAcceptOk =  ps.getNrAcceptOk();
+
+        UUID newValue = ps.get
+
+        hal;
+        highestPrepare;
+         na;
+        UUID va;
+        UUID decision;
+        Set<Pair<Integer, UUID>> //fazer igual
     }
 
     private void uponPrepareMessage(PrepareMessage prepareMessage, Host host, short i, int i1) {
@@ -288,8 +300,10 @@ public class Paxos extends GenericProtocol {
         // The AddReplicaRequest contains an "instance" field, which we ignore in this
         // incorrect protocol.
         // You should probably take it into account while doing whatever you do here.
-        PaxosInstances.getInstance().addInstance(request.getInstance(), this);
+
         membership.add(request.getReplica());
+        //PaxosState ps = PaxosInstances.getInstance().getPaxosInstance(request.getInstance());
+        //installState(ps);
     }
 
     private void uponRemoveReplica(RemoveReplicaRequest request, short sourceProto) {
@@ -297,8 +311,11 @@ public class Paxos extends GenericProtocol {
         // The RemoveReplicaRequest contains an "instance" field, which we ignore in
         // this incorrect protocol.
         // You should probably take it into account while doing whatever you do here.
-        PaxosInstances.getInstance().removeInstance(request.getInstance());
+        //PaxosInstances.getInstance().removeInstance(request.getInstance());
+
         membership.remove(request.getReplica());
+
+        MEMBERSHIP_SIZE = membership.size();
     }
 
     private void uponMsgFail(ProtoMessage msg, Host host, short destProto, Throwable throwable, int channelId) {
