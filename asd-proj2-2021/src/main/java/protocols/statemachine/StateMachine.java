@@ -19,11 +19,13 @@ import protocols.statemachine.requests.OrderRequest;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
-import java.util.Queue;
-import java.util.concurrent.LinkedBlockingQueue;
 
 /**
  * This is NOT fully functional StateMachine implementation. This is simply an
@@ -53,8 +55,9 @@ public class StateMachine extends GenericProtocol {
 
 	private State state;
 	private List<Host> membership;
-	private Queue<OrderRequest> pendingRequests;
+	private Map<Integer, OrderRequest> pendingRequests;
 	private int nextInstance;
+	private int nextOperation;
 
 	public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
 		super(PROTOCOL_NAME, PROTOCOL_ID);
@@ -65,7 +68,8 @@ public class StateMachine extends GenericProtocol {
 
 		logger.info("Listening on {}:{}", address, port);
 		this.self = new Host(InetAddress.getByName(address), Integer.parseInt(port));
-		this.pendingRequests = new LinkedBlockingQueue<>();
+		this.pendingRequests = new HashMap<>();
+		this.nextOperation = 0;
 
 		Properties channelProps = new Properties();
 		channelProps.setProperty(TCPChannel.ADDRESS_KEY, address);
@@ -118,11 +122,18 @@ public class StateMachine extends GenericProtocol {
 			membership.forEach(this::openConnection);
 			triggerNotification(new JoinedNotification(membership, 0));
 		} else {
-			state = State.JOINING;
-			logger.info("Starting in JOINING as I am not part of initial membership");
 			// You have to do something to join the system and know which instance you
 			// joined
 			// (and copy the state of that instance)
+
+			state = State.JOINING;
+			logger.info("Starting in JOINING as I am not part of initial membership");
+
+			List<Host> shuffleMembership = new ArrayList<>(membership);
+			Collections.shuffle(shuffleMembership);
+
+			Host instance = shuffleMembership.get(0);
+			openConnection(instance);
 		}
 
 	}
@@ -132,9 +143,7 @@ public class StateMachine extends GenericProtocol {
 		logger.debug("Received request: " + request);
 		if (state == State.JOINING) {
 			// Do something smart (like buffering the requests)
-			pendingRequests.add(request); 
-			// where to send after... when Active, see if queue is empty
-			// or when connectionUp 
+			pendingRequests.put(nextInstance++, request); // right???
 		} else if (state == State.ACTIVE) {
 			// Also do something smart, we don't want an infinite number of instances
 			// active
@@ -155,6 +164,9 @@ public class StateMachine extends GenericProtocol {
 		// (and send it up)
 		// or if this is an operations that was executed by the state machine itself (in
 		// which case you should execute)
+
+		// talvez mudar a classe de notifications para ter um numero de operation
+		// ou usar o instance como order
 		triggerNotification(new ExecuteNotification(notification.getOpId(), notification.getOperation()));
 	}
 
@@ -171,20 +183,24 @@ public class StateMachine extends GenericProtocol {
 	 */
 	private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
 		logger.info("Connection to {} is up", event.getNode());
-		
+		// channelId -> instance???
+		OrderRequest request = pendingRequests.remove(channelId);
+		if (request != null)
+			sendRequest(new ProposeRequest(channelId, request.getOpId(), request.getOperation()), Paxos.PROTOCOL_ID);
+
 	}
 
 	private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
 		logger.debug("Connection to {} is down, cause {}", event.getNode(), event.getCause());
 	}
 
+	// Maybe we don't want to do this forever. At some point we assume he is no
+	// longer there.
+	// Also, maybe wait a little bit before retrying, or else you'll be trying 1000s
+	// of times per second
+	// maybe its better to add a timeout
 	private void uponOutConnectionFailed(OutConnectionFailed<ProtoMessage> event, int channelId) {
 		logger.debug("Connection to {} failed, cause: {}", event.getNode(), event.getCause());
-		// Maybe we don't want to do this forever. At some point we assume he is no
-		// longer there.
-		// Also, maybe wait a little bit before retrying, or else you'll be trying 1000s
-		// of times per second
-		// maybe its better to add a timeout
 
 		short retries = 0;
 		while (retries < 5) {
