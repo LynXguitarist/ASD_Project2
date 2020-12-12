@@ -45,11 +45,18 @@ public class Paxos extends GenericProtocol {
 
     private int nrPrepareOk = 0;
     private int nrAcceptOk = 0;
+    UUID proposeValue = null;
+    private int highestPrepare; // highest prepare
+    private UUID prepareValue = null;
+    private UUID decide = null;
+    private UUID acceptValue = null;
+    private int acceptSeq = null;
+
 
     private UUID newValue = null;
 
     private int hal;
-    private int highestPrepare; // highest prepare
+
     private int na; // self prepare
     private UUID va; // value
     private UUID decision; // self decision
@@ -85,16 +92,7 @@ public class Paxos extends GenericProtocol {
     };
 
     // ---------------------------------------Paxos_Acceptor----------------------------//
-    private void prepare(int seq, UUID value) {
-        if (seq > highestPrepare) {
-            highestPrepare = seq;
-            newValue = value;
-        } else {
-            int maxKey = Collections.max(proposals.keySet());
-            newValue = proposals.get(maxKey);
-        }
-        // reply <PREPARE_OK,na,va>
-    }
+
 
     private void accept(int seq, UUID value) {
         if (seq >= highestPrepare) {
@@ -110,10 +108,10 @@ public class Paxos extends GenericProtocol {
     // ---------------------------------------Paxos_Leaners----------------------------//
 
     // receive message ACCEPT_OK from acceptor a
-    private void accepted(int n, UUID v) {
-        if (n > na) {
-            na = n;
-            va = v;
+    private void accepted(int seq, UUID value) {
+        if (seq > highestAccept) {
+            highestAccept = seq;
+            newValue = value;
             // asset.reset
         } else if (n < na) {
             return;
@@ -179,39 +177,34 @@ public class Paxos extends GenericProtocol {
     private void uponProposeRequest(ProposeRequest request, short sourceProto) {
         logger.debug("Received " + request);
         logger.debug("Sending to: " + membership);
+
         PaxosState ps = PaxosInstances.getInstance().getPaxosInstance(request.getInstance());
         installState(ps);
 
-        UUID proposeValue = null;
         while (true) {
-            //Aqui mudar pois mapa estará na instance
-           // int maxKey = Collections.max(proposals.keySet());
-
             int numberSeq = ps.getSequenceNumber() + MEMBERSHIP_SIZE;
-
-            proposals.put(numberSeq, request.getOpId());
+            ps.updateSeqNumber(numberSeq);
+            proposeValue = request.getOpId();
             PrepareMessage msgPrepare = new PrepareMessage(request.getInstance(), request.getOpId(),
-                    request.getOperation(), numberSeq, proposeValue );
+                    request.getOperation(), numberSeq, proposeValue);
             membership.forEach(h -> sendMessage(msgPrepare, h));
 
             long startTimePrepare = System.currentTimeMillis(); // fetch starting time
-            while (nrPrepareOk < (membership.size() / 2) || (System.currentTimeMillis() - startTimePrepare) < 10000) {
+            while (nrPrepareOk < (MEMBERSHIP_SIZE / 2) || (System.currentTimeMillis() - startTimePrepare) < 10000) {
             }
-            if (nrPrepareOk >= (membership.size() / 2)) {
-                if (newValue != null) {
-                    proposeValue = newValue;
-                } else {
-                    proposeValue = request.getOpId();
-                }
+            if (nrPrepareOk >= (MEMBERSHIP_SIZE / 2)) {
                 AcceptMessage msgAccept = new AcceptMessage(request.getInstance(), request.getOpId(),
                         request.getOperation(), numberSeq, proposeValue);
                 membership.forEach(h -> sendMessage(msgAccept, h));
+
                 long startTimeAccept = System.currentTimeMillis(); // fetch starting time
-                while (nrAcceptOk < (membership.size() / 2) || (System.currentTimeMillis() - startTimeAccept) < 10000) {
+                while (nrAcceptOk < (MEMBERSHIP_SIZE / 2) || (System.currentTimeMillis() - startTimeAccept) < 10000) {
                 }
-                if (nrAcceptOk >= (membership.size() / 2)) {
-                    DecideRequest decide = new DecideRequest(request.getInstance(), request.getOpId(),
-                            request.getOperation(), numberSeq);
+                if (nrAcceptOk >= (MEMBERSHIP_SIZE / 2)) {
+                    prepareValue = proposeValue;
+                    decide = proposeValue;
+                    DecideRequest decideReq = new DecideRequest(request.getInstance(), request.getOpId(),
+                            request.getOperation(), decide);
                     //enviar para o cliente
                     break;
                 } else {
@@ -238,26 +231,33 @@ public class Paxos extends GenericProtocol {
         Set<Pair<Integer, UUID>> //fazer igual
     }
 
-    private void uponPrepareMessage(PrepareMessage prepareMessage, Host host, short i, int i1) {
-        //vale a pena estar separado?
-        prepare(prepareMessage.getSeqNumber(), prepareMessage.getProposeValue());
-        PrepareMessage_OK msgPrepare_OK = new PrepareMessage_OK(prepareMessage.getInstance(), prepareMessage.getOpId(), prepareMessage.getOp(), highestPrepare, newValue);
-        //host é quem me enviou?
-        sendMessage(msgPrepare_OK, host);
+    private void uponPrepareMessage(PrepareMessage msg, Host host, short i, int i1) {
+        int seq = msg.getSeqNumber();
+        UUID value = msg.getProposeValue();
+        if (seq > highestPrepare) {
+            highestPrepare = seq;
+            if(prepareValue != null){
+                value = prepareValue;
+            }
+            PrepareMessage_OK msgPrepare_OK = new PrepareMessage_OK(msg.getInstance(), msg.getOpId(), msg.getOp(), seq, value);
+            //host é quem me enviou?
+            sendMessage(msgPrepare_OK, host);
+        }
     }
 
     private void uponPrepareMessage_OK(PrepareMessage_OK prepareMessage_OK, Host host, short i, int i1) {
         nrPrepareOk++;
+        proposeValue = prepareMessage_OK.getProposeValue();
     }
 
     /**
      * Learner receive this message
      */
-    private void uponAcceptMessage_LOK(AcceptMessage_OK msg, Host host, short sourceProto, int channelId) {
-        UUID v = msg.getProposeValue();
-        int n = msg.getSeqNumber();
+    private void uponAcceptMessage_LOK(AcceptMessage_LOK msg, Host host, short sourceProto, int channelId) {
+        UUID value = msg.getProposeValue();
+        int seq = msg.getSeqNumber();
 
-        if (n > hal) {
+        if (seq > hal) {
             hal = n;
             va = v;
             aset.clear();
@@ -274,25 +274,22 @@ public class Paxos extends GenericProtocol {
      * Proposer receive this message
      */
     private void uponAcceptMessage_OK(AcceptMessage_OK msg, Host host, short sourceProto, int channelId) {
-        UUID v = msg.getProposeValue();
-        int n = msg.getSeqNumber();
-
-        if (n > hal) {
-            hal = n;
-            va = v;
-            aset.clear();
-        } else if (n == hal) {
-            aset.add(new Pair(n, v));
-        }
-        if (aset.size() > (membership.size() / 2)) {
-            decision = va;
-            //trigger decide
-
-        }
+        nrAcceptOk++;
     }
 
-    private void uponAcceptMessage(AcceptMessage acceptMessage, Host host, short i, int i1) {
+    private void uponAcceptMessage(AcceptMessage msg, Host host, short i, int i1) {
+        UUID value = msg.getProposeValue();
+        int seq = msg.getSeqNumber();
 
+        if (seq >= highestPrepare) {
+            acceptValue = value;
+            acceptSeq = seq;
+            AcceptMessage_OK msgAccept_OK = new AcceptMessage_OK(msg.getInstance(), msg.getOpId(), msg.getOp(), seq, value);
+            AcceptMessage_LOK msgAccept_LOK = new AcceptMessage_LOK(msg.getInstance(), msg.getOpId(), msg.getOp(), seq, value);
+            //host é quem me enviou?
+            sendMessage(msgAccept_OK, host);
+            membership.forEach(h -> sendMessage(msgAccept_LOK, h));
+        }
     }
 
     private void uponAddReplica(AddReplicaRequest request, short sourceProto) {

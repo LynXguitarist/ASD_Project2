@@ -37,4 +37,8 @@ public class PaxosState {
     }
 
     public int getSequenceNumber(){ return sequenceNumber; }
+
+    public void updateSeqNumber(int numberSeq) {
+        this.sequenceNumber = numberSeq;
+    }
 }
