@@ -12,7 +12,11 @@ import org.apache.logging.log4j.Logger;
 import protocols.statemachine.notifications.ChannelReadyNotification;
 import protocols.agreement.notifications.DecidedNotification;
 import protocols.agreement.requests.ProposeRequest;
+import protocols.app.requests.CurrentStateRequest;
+import protocols.app.requests.InstallStateRequest;
 import protocols.paxos.Paxos;
+import protocols.paxos.requests.AddReplicaRequest;
+import protocols.paxos.requests.RemoveReplicaRequest;
 import protocols.statemachine.notifications.ExecuteNotification;
 import protocols.statemachine.requests.OrderRequest;
 
@@ -43,7 +47,7 @@ public class StateMachine extends GenericProtocol {
 	private static final Logger logger = LogManager.getLogger(StateMachine.class);
 
 	private enum State {
-		JOINING, ACTIVE, INACTIVE
+		JOINING, ACTIVE // INACTIVE
 	}
 
 	// Protocol information, to register in babel
@@ -57,7 +61,6 @@ public class StateMachine extends GenericProtocol {
 	private List<Host> membership;
 	private Map<Integer, OrderRequest> pendingRequests;
 	private int nextInstance;
-	private int nextOperation;
 
 	public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
 		super(PROTOCOL_NAME, PROTOCOL_ID);
@@ -69,7 +72,6 @@ public class StateMachine extends GenericProtocol {
 		logger.info("Listening on {}:{}", address, port);
 		this.self = new Host(InetAddress.getByName(address), Integer.parseInt(port));
 		this.pendingRequests = new HashMap<>();
-		this.nextOperation = 0;
 
 		Properties channelProps = new Properties();
 		channelProps.setProperty(TCPChannel.ADDRESS_KEY, address);
@@ -133,7 +135,14 @@ public class StateMachine extends GenericProtocol {
 			Collections.shuffle(shuffleMembership);
 
 			Host instance = shuffleMembership.get(0);
-			openConnection(instance);
+			openConnection(instance); // needed???
+
+			sendRequest(new AddReplicaRequest(channelId, instance), Paxos.PROTOCOL_ID); // channelId???
+			sendRequest(new CurrentStateRequest(channelId), Paxos.PROTOCOL_ID);
+
+			// will receive the membership too
+			// sendRequest(new InstallStateRequest(bytes from currentStateRequest),
+			// Paxos.PROTOCOL_ID);
 		}
 
 	}
@@ -141,16 +150,17 @@ public class StateMachine extends GenericProtocol {
 	/*--------------------------------- Requests ---------------------------------------- */
 	private void uponOrderRequest(OrderRequest request, short sourceProto) {
 		logger.debug("Received request: " + request);
+		// Do something smart (like buffering the requests)
 		if (state == State.JOINING) {
-			// Do something smart (like buffering the requests)
 			pendingRequests.put(nextInstance++, request); // right???
 		} else if (state == State.ACTIVE) {
 			// Also do something smart, we don't want an infinite number of instances
 			// active
+
 			// Maybe you should modify what is it that you are proposing so that you
-			// remember that this
-			// operation was issued by the application (and not an internal operation, check
-			// the uponDecidedNotification)
+			// remember that this operation was issued by the application
+			// (and not an internal operation, check the uponDecidedNotification)
+
 			sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()),
 					Paxos.PROTOCOL_ID);
 		}
@@ -160,14 +170,19 @@ public class StateMachine extends GenericProtocol {
 	private void uponDecidedNotification(DecidedNotification notification, short sourceProto) {
 		logger.debug("Received notification: " + notification);
 		// Maybe we should make sure operations are executed in order?
+
+		// use Order here, order list, or use order request
+
 		// You should be careful and check if this operation is an application operation
 		// (and send it up)
 		// or if this is an operations that was executed by the state machine itself (in
 		// which case you should execute)
-
-		// talvez mudar a classe de notifications para ter um numero de operation
-		// ou usar o instance como order
-		triggerNotification(new ExecuteNotification(notification.getOpId(), notification.getOperation()));
+		int i = 0;
+		if (i == 0) // Change to see if Application operation
+			sendRequest(new ProposeRequest(nextInstance++, notification.getOpId(), notification.getOperation()),
+					Paxos.PROTOCOL_ID);
+		else
+			triggerNotification(new ExecuteNotification(notification.getOpId(), notification.getOperation()));
 	}
 
 	/*--------------------------------- Messages ---------------------------------------- */
@@ -184,6 +199,7 @@ public class StateMachine extends GenericProtocol {
 	private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
 		logger.info("Connection to {} is up", event.getNode());
 		// channelId -> instance???
+		// here and/or uponInConnection?
 		OrderRequest request = pendingRequests.remove(channelId);
 		if (request != null)
 			sendRequest(new ProposeRequest(channelId, request.getOpId(), request.getOperation()), Paxos.PROTOCOL_ID);
@@ -207,7 +223,7 @@ public class StateMachine extends GenericProtocol {
 			if (membership.contains(event.getNode())) {
 				logger.info("Connection to {} restored!", event.getNode());
 				openConnection(event.getNode());
-				break;
+				return;
 			}
 			try {
 				Thread.sleep(1000);
@@ -215,6 +231,7 @@ public class StateMachine extends GenericProtocol {
 				e.printStackTrace();
 			}
 		}
+		sendRequest(new RemoveReplicaRequest(event.getId(), event.getNode()), Paxos.PROTOCOL_ID); // ebent.getId() ???
 	}
 
 	private void uponInConnectionUp(InConnectionUp event, int channelId) {
