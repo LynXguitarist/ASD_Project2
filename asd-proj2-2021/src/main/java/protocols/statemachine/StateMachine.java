@@ -1,8 +1,9 @@
 package protocols.statemachine;
 
-import protocols.agreement.notifications.JoinedNotification;
 import protocols.paxos.PaxosInstances;
 import protocols.paxos.PaxosState;
+import protocols.paxos.notifications.DecidedNotification;
+import protocols.paxos.notifications.JoinedNotification;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
@@ -12,12 +13,12 @@ import pt.unl.fct.di.novasys.network.data.Host;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import protocols.statemachine.notifications.ChannelReadyNotification;
-import protocols.agreement.notifications.DecidedNotification;
-import protocols.agreement.requests.ProposeRequest;
+import protocols.app.requests.CurrentStateReply;
 import protocols.app.requests.CurrentStateRequest;
 import protocols.app.requests.InstallStateRequest;
 import protocols.paxos.Paxos;
 import protocols.paxos.requests.AddReplicaRequest;
+import protocols.paxos.requests.ProposeRequest;
 import protocols.paxos.requests.RemoveReplicaRequest;
 import protocols.statemachine.notifications.ExecuteNotification;
 import protocols.statemachine.requests.OrderRequest;
@@ -32,6 +33,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
+import java.util.Queue;
 
 /**
  * This is NOT fully functional StateMachine implementation. This is simply an
@@ -48,11 +50,11 @@ import java.util.Properties;
 public class StateMachine extends GenericProtocol {
 	private static final Logger logger = LogManager.getLogger(StateMachine.class);
 
-	//Replica id
+	// Replica id
 	public static int REPLICA_ID;
 
 	private enum State {
-		JOINING, ACTIVE, INACTIVE
+		JOINING, ACTIVE // INACTIVE
 	}
 
 	// Protocol information, to register in babel
@@ -64,7 +66,7 @@ public class StateMachine extends GenericProtocol {
 
 	private State state;
 	private List<Host> membership;
-	private Map<Integer, OrderRequest> pendingRequests;
+	private Queue<OrderRequest> pendingRequests;
 	private int nextInstance;
 
 	public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
@@ -76,9 +78,9 @@ public class StateMachine extends GenericProtocol {
 
 		logger.info("Listening on {}:{}", address, port);
 		this.self = new Host(InetAddress.getByName(address), Integer.parseInt(port));
-		this.pendingRequests = new HashMap<>();
+		this.pendingRequests = new LinkedList<>();
 
-		REPLICA_ID = self.getPort(); //port number will be the replica ID
+		REPLICA_ID = self.getPort(); // port number will be the replica ID
 
 		Properties channelProps = new Properties();
 		channelProps.setProperty(TCPChannel.ADDRESS_KEY, address);
@@ -97,6 +99,9 @@ public class StateMachine extends GenericProtocol {
 
 		/*--------------------- Register Request Handlers ----------------------------- */
 		registerRequestHandler(OrderRequest.REQUEST_ID, this::uponOrderRequest);
+		
+		/*--------------------- Register Reply Handlers ----------------------------- */
+		registerReplyHandler(CurrentStateReply.REQUEST_ID, this::uponCurrentStateReply);
 
 		/*--------------------- Register Notification Handlers ----------------------------- */
 		subscribeNotification(DecidedNotification.NOTIFICATION_ID, this::uponDecidedNotification);
@@ -137,19 +142,13 @@ public class StateMachine extends GenericProtocol {
 
 			state = State.JOINING;
 			logger.info("Starting in JOINING as I am not part of initial membership");
-
-			List<Host> shuffleMembership = new ArrayList<>(membership);
-			Collections.shuffle(shuffleMembership);
-
-			Host instance = shuffleMembership.get(0);
-			openConnection(instance); // needed???
-
-			sendRequest(new AddReplicaRequest(channelId, instance), Paxos.PROTOCOL_ID); // channelId???
-			sendRequest(new CurrentStateRequest(channelId), Paxos.PROTOCOL_ID);
-
-			// will receive the membership too
-			// sendRequest(new InstallStateRequest(bytes from currentStateRequest),
-			// Paxos.PROTOCOL_ID);
+			
+			membership = new LinkedList<>(initialMembership);
+			membership.forEach(this::openConnection);
+			
+			// channelId???
+			sendRequest(new AddReplicaRequest(nextInstance++, self), Paxos.PROTOCOL_ID);
+			sendRequest(new CurrentStateRequest(nextInstance), Paxos.PROTOCOL_ID);
 		}
 
 	}
@@ -159,7 +158,7 @@ public class StateMachine extends GenericProtocol {
 		logger.debug("Received request: " + request);
 		// Do something smart (like buffering the requests)
 		if (state == State.JOINING) {
-			pendingRequests.put(nextInstance++, request); // right???
+			pendingRequests.add(request); // right???
 		} else if (state == State.ACTIVE) {
 			// Also do something smart, we don't want an infinite number of instances
 			// active
@@ -168,7 +167,6 @@ public class StateMachine extends GenericProtocol {
 			// remember that this operation was issued by the application
 			// (and not an internal operation, check the uponDecidedNotification)
 
-			sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()),
 			// remember that this
 			// operation was issued by the application (and not an internal operation, check
 			// the uponDecidedNotification)
@@ -177,6 +175,10 @@ public class StateMachine extends GenericProtocol {
 			sendRequest(new ProposeRequest(nextInstance++, orderRequest.getOpId(), orderRequest.getOperation()),
 					Paxos.PROTOCOL_ID);
 		}
+	}
+
+	private void uponCurrentStateReply(CurrentStateReply request, short sourceProto) {
+		sendRequest(new InstallStateRequest(request.getState()), Paxos.PROTOCOL_ID);
 	}
 
 	/*--------------------------------- Notifications ---------------------------------------- */
@@ -203,13 +205,12 @@ public class StateMachine extends GenericProtocol {
 
 		if (state == State.ACTIVE) {
 			nextInstance++;
-			PaxosInstances.getInstance().addInstance(nextInstance,new PaxosState(nextInstance));
+			PaxosInstances.getInstance().addInstance(nextInstance, new PaxosState(nextInstance));
 
-			OrderRequest orderRequest = pendingRequests.remove();
-			sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), orderRequest.getOperation()),
-					Paxos.PROTOCOL_ID);
-
-
+			OrderRequest orderRequest = pendingRequests.poll();
+			if (orderRequest != null)
+				sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), orderRequest.getOperation()),
+						Paxos.PROTOCOL_ID);
 		}
 	}
 
@@ -228,7 +229,7 @@ public class StateMachine extends GenericProtocol {
 		logger.info("Connection to {} is up", event.getNode());
 		// channelId -> instance???
 		// here and/or uponInConnection?
-		OrderRequest request = pendingRequests.remove(channelId);
+		OrderRequest request = pendingRequests.poll();
 		if (request != null)
 			sendRequest(new ProposeRequest(channelId, request.getOpId(), request.getOperation()), Paxos.PROTOCOL_ID);
 
