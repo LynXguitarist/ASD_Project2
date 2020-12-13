@@ -13,6 +13,7 @@ import pt.unl.fct.di.novasys.network.data.Host;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import protocols.statemachine.notifications.ChannelReadyNotification;
+import protocols.app.HashApp;
 import protocols.app.requests.CurrentStateReply;
 import protocols.app.requests.CurrentStateRequest;
 import protocols.app.requests.InstallStateRequest;
@@ -26,10 +27,14 @@ import protocols.statemachine.requests.OrderRequest;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Properties;
 import java.util.Queue;
+import java.util.Set;
+import java.util.UUID;
 
 /**
  * This is NOT fully functional StateMachine implementation. This is simply an
@@ -62,7 +67,7 @@ public class StateMachine extends GenericProtocol {
 
 	private State state;
 	private List<Host> membership;
-	private Queue<OrderRequest> pendingRequests;
+	private Queue<OrderRequest> pendingRequests; // maybe order by operationId
 	private int nextInstance;
 
 	public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
@@ -139,11 +144,13 @@ public class StateMachine extends GenericProtocol {
 			state = State.JOINING;
 			logger.info("Starting in JOINING as I am not part of initial membership");
 
-			membership = new LinkedList<>(initialMembership);
-			membership.forEach(this::openConnection);
+			Collections.shuffle(initialMembership);
+			Host toJoin = initialMembership.get(0); // replica that we will contact
 
-			sendRequest(new AddReplicaRequest(nextInstance++, self), Paxos.PROTOCOL_ID);
-			sendRequest(new CurrentStateRequest(nextInstance), Paxos.PROTOCOL_ID);
+			// Need to know in which instance that replica is
+
+			sendRequest(new AddReplicaRequest(nextInstance, self), Paxos.PROTOCOL_ID);
+			sendRequest(new CurrentStateRequest(nextInstance), HashApp.PROTO_ID);
 		}
 
 	}
@@ -162,9 +169,8 @@ public class StateMachine extends GenericProtocol {
 			// remember that this operation was issued by the application
 			// (and not an internal operation, check the uponDecidedNotification)
 
-			// this operation was issued by the application (and not an internal operation,
-			// check
-			// the uponDecidedNotification)
+			// Add a boolean to the operation, to know if is an application or state
+			// operation
 			pendingRequests.add(request);
 			OrderRequest orderRequest = pendingRequests.remove();
 			sendRequest(new ProposeRequest(nextInstance++, orderRequest.getOpId(), orderRequest.getOperation()),
@@ -173,7 +179,10 @@ public class StateMachine extends GenericProtocol {
 	}
 
 	private void uponCurrentStateReply(CurrentStateReply request, short sourceProto) {
-		sendRequest(new InstallStateRequest(request.getState()), Paxos.PROTOCOL_ID);
+		sendRequest(new InstallStateRequest(request.getState()), HashApp.PROTO_ID);
+		membership.forEach(this::openConnection);
+		// Notifies Agreement Protocol that this replica joined the system
+		triggerNotification(new JoinedNotification(membership, request.getInstance()));
 	}
 
 	/*--------------------------------- Notifications ---------------------------------------- */
@@ -181,14 +190,12 @@ public class StateMachine extends GenericProtocol {
 		logger.debug("Received notification: " + notification);
 		// Maybe we should make sure operations are executed in order?
 
-		sendRequest(new OrderRequest(notification.getOpId(), notification.getOperation()), Paxos.PROTOCOL_ID);
-
 		// You should be careful and check if this operation is an application operation
 		// (and send it up)
 		// or if this is an operations that was executed by the state machine itself (in
 		// which case you should execute)
 
-		if (state == State.ACTIVE) {
+		if (state == State.ACTIVE) { // and it's an application operation
 			nextInstance++;
 			PaxosInstances.getInstance().addInstance(nextInstance, new PaxosState(nextInstance));
 
@@ -196,8 +203,16 @@ public class StateMachine extends GenericProtocol {
 			if (orderRequest != null)
 				sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), orderRequest.getOperation()),
 						Paxos.PROTOCOL_ID);
-		} else
+			// only executes the operations if it's instance > nextInstance
+		} else if (nextInstance < notification.getInstance()) {
 			triggerNotification(new ExecuteNotification(notification.getOpId(), notification.getOperation()));
+		}
+	}
+
+	private void uponChangeLeader(DecidedNotification notification, short sourceProto) {
+		// For Multi-Paxos
+		// Change type of notification
+		// a partir dos 15 min Multi Paxos Lab 7
 	}
 
 	/*--------------------------------- Messages ---------------------------------------- */
@@ -211,23 +226,6 @@ public class StateMachine extends GenericProtocol {
 	 * --------------------------------- TCPChannel Events
 	 * ----------------------------
 	 */
-	private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
-		logger.info("Connection to {} is up", event.getNode());
-		OrderRequest request = pendingRequests.poll();
-		if (request != null)
-			sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()), Paxos.PROTOCOL_ID);
-
-	}
-
-	private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
-		logger.debug("Connection to {} is down, cause {}", event.getNode(), event.getCause());
-	}
-
-	// Maybe we don't want to do this forever. At some point we assume he is no
-	// longer there.
-	// Also, maybe wait a little bit before retrying, or else you'll be trying 1000s
-	// of times per second
-	// maybe its better to add a timeout
 	private void uponOutConnectionFailed(OutConnectionFailed<ProtoMessage> event, int channelId) {
 		logger.debug("Connection to {} failed, cause: {}", event.getNode(), event.getCause());
 
@@ -245,6 +243,22 @@ public class StateMachine extends GenericProtocol {
 			}
 		}
 		sendRequest(new RemoveReplicaRequest(event.getId(), event.getNode()), Paxos.PROTOCOL_ID); // ebent.getId() ???
+	}
+
+	private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
+		logger.info("Connection to {} is up", event.getNode());
+//		// openConnection(event.getNode(), channelId);
+//
+//		// is this right???
+//		OrderRequest request = pendingRequests.poll();
+//		if (request != null)
+//			sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()),
+//					Paxos.PROTOCOL_ID);
+
+	}
+
+	private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
+		logger.debug("Connection to {} is down, cause {}", event.getNode(), event.getCause());
 	}
 
 	private void uponInConnectionUp(InConnectionUp event, int channelId) {
