@@ -26,12 +26,8 @@ import protocols.statemachine.requests.OrderRequest;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 
@@ -99,7 +95,7 @@ public class StateMachine extends GenericProtocol {
 
 		/*--------------------- Register Request Handlers ----------------------------- */
 		registerRequestHandler(OrderRequest.REQUEST_ID, this::uponOrderRequest);
-		
+
 		/*--------------------- Register Reply Handlers ----------------------------- */
 		registerReplyHandler(CurrentStateReply.REQUEST_ID, this::uponCurrentStateReply);
 
@@ -142,11 +138,10 @@ public class StateMachine extends GenericProtocol {
 
 			state = State.JOINING;
 			logger.info("Starting in JOINING as I am not part of initial membership");
-			
+
 			membership = new LinkedList<>(initialMembership);
 			membership.forEach(this::openConnection);
-			
-			// channelId???
+
 			sendRequest(new AddReplicaRequest(nextInstance++, self), Paxos.PROTOCOL_ID);
 			sendRequest(new CurrentStateRequest(nextInstance), Paxos.PROTOCOL_ID);
 		}
@@ -156,8 +151,8 @@ public class StateMachine extends GenericProtocol {
 	/*--------------------------------- Requests ---------------------------------------- */
 	private void uponOrderRequest(OrderRequest request, short sourceProto) {
 		logger.debug("Received request: " + request);
-		// Do something smart (like buffering the requests)
 		if (state == State.JOINING) {
+			// Do something smart (like buffering the requests)
 			pendingRequests.add(request); // right???
 		} else if (state == State.ACTIVE) {
 			// Also do something smart, we don't want an infinite number of instances
@@ -167,8 +162,8 @@ public class StateMachine extends GenericProtocol {
 			// remember that this operation was issued by the application
 			// (and not an internal operation, check the uponDecidedNotification)
 
-			// remember that this
-			// operation was issued by the application (and not an internal operation, check
+			// this operation was issued by the application (and not an internal operation,
+			// check
 			// the uponDecidedNotification)
 			pendingRequests.add(request);
 			OrderRequest orderRequest = pendingRequests.remove();
@@ -186,22 +181,12 @@ public class StateMachine extends GenericProtocol {
 		logger.debug("Received notification: " + notification);
 		// Maybe we should make sure operations are executed in order?
 
-		// use Order here, order list, or use order request
+		sendRequest(new OrderRequest(notification.getOpId(), notification.getOperation()), Paxos.PROTOCOL_ID);
 
 		// You should be careful and check if this operation is an application operation
 		// (and send it up)
 		// or if this is an operations that was executed by the state machine itself (in
 		// which case you should execute)
-		int i = 0;
-		if (i == 0) // Change to see if Application operation
-			sendRequest(new ProposeRequest(nextInstance++, notification.getOpId(), notification.getOperation()),
-					Paxos.PROTOCOL_ID);
-		else
-			triggerNotification(new ExecuteNotification(notification.getOpId(), notification.getOperation()));
-
-		// talvez mudar a classe de notifications para ter um numero de operation
-		// ou usar o instance como order
-		triggerNotification(new ExecuteNotification(notification.getOpId(), notification.getOperation()));
 
 		if (state == State.ACTIVE) {
 			nextInstance++;
@@ -211,7 +196,8 @@ public class StateMachine extends GenericProtocol {
 			if (orderRequest != null)
 				sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), orderRequest.getOperation()),
 						Paxos.PROTOCOL_ID);
-		}
+		} else
+			triggerNotification(new ExecuteNotification(notification.getOpId(), notification.getOperation()));
 	}
 
 	/*--------------------------------- Messages ---------------------------------------- */
@@ -227,11 +213,9 @@ public class StateMachine extends GenericProtocol {
 	 */
 	private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
 		logger.info("Connection to {} is up", event.getNode());
-		// channelId -> instance???
-		// here and/or uponInConnection?
 		OrderRequest request = pendingRequests.poll();
 		if (request != null)
-			sendRequest(new ProposeRequest(channelId, request.getOpId(), request.getOperation()), Paxos.PROTOCOL_ID);
+			sendRequest(new ProposeRequest(nextInstance++, request.getOpId(), request.getOperation()), Paxos.PROTOCOL_ID);
 
 	}
 
