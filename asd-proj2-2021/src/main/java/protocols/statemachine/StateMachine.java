@@ -25,6 +25,8 @@ import protocols.paxos.requests.AddReplicaRequest;
 import protocols.paxos.requests.ProposeRequest;
 import protocols.paxos.requests.RemoveReplicaRequest;
 import protocols.statemachine.notifications.ExecuteNotification;
+import protocols.statemachine.requests.JoinedReply;
+import protocols.statemachine.requests.JoinedRequest;
 import protocols.statemachine.requests.OrderRequest;
 
 import java.io.IOException;
@@ -103,9 +105,11 @@ public class StateMachine extends GenericProtocol {
 
 		/*--------------------- Register Request Handlers ----------------------------- */
 		registerRequestHandler(OrderRequest.REQUEST_ID, this::uponOrderRequest);
+		registerRequestHandler(JoinedRequest.REQUEST_ID, this::uponJoinedRequest);
 
 		/*--------------------- Register Reply Handlers ----------------------------- */
 		registerReplyHandler(CurrentStateReply.REQUEST_ID, this::uponCurrentStateReply);
+		registerReplyHandler(JoinedReply.REQUEST_ID, this::uponJoinedReply);
 
 		/*--------------------- Register Notification Handlers ----------------------------- */
 		subscribeNotification(DecidedNotification.NOTIFICATION_ID, this::uponDecidedNotification);
@@ -147,9 +151,8 @@ public class StateMachine extends GenericProtocol {
 			state = State.JOINING;
 			logger.info("Starting in JOINING as I am not part of initial membership");
 
-			sendRequest(new AddReplicaRequest(nextInstance, self), Paxos.PROTOCOL_ID);
-			// need to receive notification, to know the instance
-			sendRequest(new CurrentStateRequest(nextInstance), HashApp.PROTO_ID);
+			sendRequest(new JoinedRequest(self), StateMachine.PROTOCOL_ID);
+			// sendRequest(new AddReplicaRequest(nextInstance, self), Paxos.PROTOCOL_ID);
 		}
 
 	}
@@ -178,11 +181,28 @@ public class StateMachine extends GenericProtocol {
 		}
 	}
 
-	private void uponCurrentStateReply(CurrentStateReply request, short sourceProto) {
-		sendRequest(new InstallStateRequest(request.getState()), HashApp.PROTO_ID);
+	private void uponJoinedRequest(JoinedRequest request, short sourceProto) {
+		// A replica requested to join the system
+		// Request the currentState of the Application
+		// Send to the replica the state, membership and instance
+
+		// sendRequest(new CurrentStateRequest(reply.getInstance()), HashApp.PROTO_ID);
+	}
+
+	private void uponJoinedReply(JoinedReply reply, short sourceProto) {
+		// This replica joined the system
+		// The replica that replied sent the instance, state and membership
+		membership = new LinkedList<>(reply.getMembership());
 		membership.forEach(this::openConnection);
+		nextInstance = reply.getInstance();
+		sendRequest(new InstallStateRequest(reply.getState()), HashApp.PROTO_ID);
 		// Notifies Agreement Protocol that this replica joined the system
-		triggerNotification(new JoinedNotification(membership, request.getInstance()));
+		triggerNotification(new JoinedNotification(membership, reply.getInstance()));
+	}
+
+	private void uponCurrentStateReply(CurrentStateReply reply, short sourceProto) {
+		// Receives the reply from the Application
+		// Sends reply to the replica that requested to Join the system
 	}
 
 	/*--------------------------------- Notifications ---------------------------------------- */
