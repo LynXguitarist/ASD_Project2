@@ -10,6 +10,9 @@ import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
 import pt.unl.fct.di.novasys.channel.tcp.TCPChannel;
 import pt.unl.fct.di.novasys.channel.tcp.events.*;
 import pt.unl.fct.di.novasys.network.data.Host;
+import utils.Operation;
+import utils.Utils;
+
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import protocols.statemachine.notifications.ChannelReadyNotification;
@@ -67,7 +70,7 @@ public class StateMachine extends GenericProtocol {
 
 	private State state;
 	private List<Host> membership;
-	private Queue<OrderRequest> pendingRequests; // maybe order by operationId
+	private Queue<OrderRequest> pendingRequests; // maybe order by operationId with SortedMap
 	private int nextInstance;
 
 	public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
@@ -144,12 +147,8 @@ public class StateMachine extends GenericProtocol {
 			state = State.JOINING;
 			logger.info("Starting in JOINING as I am not part of initial membership");
 
-			Collections.shuffle(initialMembership);
-			Host toJoin = initialMembership.get(0); // replica that we will contact
-
-			// Need to know in which instance that replica is
-
 			sendRequest(new AddReplicaRequest(nextInstance, self), Paxos.PROTOCOL_ID);
+			// need to receive notification, to know the instance
 			sendRequest(new CurrentStateRequest(nextInstance), HashApp.PROTO_ID);
 		}
 
@@ -169,12 +168,13 @@ public class StateMachine extends GenericProtocol {
 			// remember that this operation was issued by the application
 			// (and not an internal operation, check the uponDecidedNotification)
 
-			// Add a boolean to the operation, to know if is an application or state
+			// Add a char to the operation, to know if is an application or state
 			// operation
+			byte[] operation = Utils.joinByteArray(request.getOperation(), 't');
+
 			pendingRequests.add(request);
 			OrderRequest orderRequest = pendingRequests.remove();
-			sendRequest(new ProposeRequest(nextInstance++, orderRequest.getOpId(), orderRequest.getOperation()),
-					Paxos.PROTOCOL_ID);
+			sendRequest(new ProposeRequest(nextInstance++, orderRequest.getOpId(), operation), Paxos.PROTOCOL_ID);
 		}
 	}
 
@@ -195,17 +195,22 @@ public class StateMachine extends GenericProtocol {
 		// or if this is an operations that was executed by the state machine itself (in
 		// which case you should execute)
 
-		if (state == State.ACTIVE) { // and it's an application operation
+		Operation op = Utils.splitByteArray(notification.getOperation());
+		char c = op.getC();
+		byte[] operation = op.getOperation();
+
+		if (state != State.ACTIVE) // if it is not ACTIVE, ignores
+			return;
+		else if (c == 't') { // it's an application operation
 			nextInstance++;
 			PaxosInstances.getInstance().addInstance(nextInstance, new PaxosState(nextInstance));
 
 			OrderRequest orderRequest = pendingRequests.poll();
 			if (orderRequest != null)
-				sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), orderRequest.getOperation()),
-						Paxos.PROTOCOL_ID);
+				sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), operation), Paxos.PROTOCOL_ID);
+		} else if (nextInstance < notification.getInstance()) { // state machine operation
 			// only executes the operations if it's instance > nextInstance
-		} else if (nextInstance < notification.getInstance()) {
-			triggerNotification(new ExecuteNotification(notification.getOpId(), notification.getOperation()));
+			triggerNotification(new ExecuteNotification(notification.getOpId(), operation));
 		}
 	}
 
