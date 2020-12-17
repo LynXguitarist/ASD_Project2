@@ -196,8 +196,11 @@ public class StateMachine extends GenericProtocol {
 		// A replica requested to join the system
 		// Propose a request as a StateMachine operation
 
-		byte[] operation = Utils.joinByteArray(null, 'f'); // operation, construct the operation
-		sendRequest(new ProposeRequest(nextInstance, UUID.randomUUID(), operation), Paxos.PROTOCOL_ID);
+		byte[] operation = Utils.joinByteArray(request.getReplica(), 'f'); // operation, construct the operation???
+		pendingRequests.add(new OrderRequest(UUID.randomUUID(), operation));
+
+		// sendRequest(new ProposeRequest(nextInstance, UUID.randomUUID(), operation),
+		// Paxos.PROTOCOL_ID);
 	}
 
 	private void uponJoinedReply(JoinedReply reply, short sourceProto) {
@@ -242,11 +245,16 @@ public class StateMachine extends GenericProtocol {
 			 */
 			sendRequest(new ProposeRequest(nextInstance++, notification.getOpId(), operation), Paxos.PROTOCOL_ID);
 		} else if (nextInstance < notification.getInstance()) { // state machine operation
+
 			// only executes the operations if it's instance > nextInstance
 			// get currentState first
 
 			// How to know what replica to add? Is in the operation?
 			// sendRequest(new AddReplicaRequest(nextInstance, ), destination);
+
+			// como ir buscar o host a ser criado
+			membership.forEach(host -> sendRequest(new AddReplicaRequest(nextInstance, host), Paxos.PROTOCOL_ID));
+
 			sendRequest(new CurrentStateRequest(nextInstance), HashApp.PROTO_ID);
 			triggerNotification(new ExecuteNotification(notification.getOpId(), operation));
 		}
