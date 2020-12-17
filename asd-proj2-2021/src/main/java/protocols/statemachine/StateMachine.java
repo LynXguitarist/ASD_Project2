@@ -188,7 +188,7 @@ public class StateMachine extends GenericProtocol {
 			else
 				operation = orderRequest.getOperation();
 
-			sendRequest(new ProposeRequest(nextInstance++, orderRequest.getOpId(), operation), Paxos.PROTOCOL_ID);
+			sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), operation), Paxos.PROTOCOL_ID);
 		}
 	}
 
@@ -238,12 +238,14 @@ public class StateMachine extends GenericProtocol {
 			return;
 		} else if (c == 't') { // it's an application operation
 			triggerNotification(new ExecuteNotification(notification.getOpId(), operation));
+			// nextInstance++;
 		} else if (nextInstance < notification.getInstance()) { // state machine operation
 			// only executes the operations if it's instance > nextInstance
 			// get currentState first
 			membership.forEach(host -> sendRequest(new AddReplicaRequest(nextInstance, host), Paxos.PROTOCOL_ID));
 
 			sendRequest(new CurrentStateRequest(nextInstance), HashApp.PROTO_ID);
+			// nextInstance++;
 		}
 	}
 
@@ -283,7 +285,7 @@ public class StateMachine extends GenericProtocol {
 		}
 		// remove node from system
 		membership.remove(event.getNode());
-		sendRequest(new RemoveReplicaRequest(event.getId(), event.getNode()), Paxos.PROTOCOL_ID); // ebent.getId() ???
+		sendRequest(new RemoveReplicaRequest(nextInstance, event.getNode()), Paxos.PROTOCOL_ID);
 	}
 
 	private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
