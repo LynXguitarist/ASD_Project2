@@ -37,6 +37,7 @@ import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
 import java.util.Set;
@@ -72,6 +73,7 @@ public class StateMachine extends GenericProtocol {
 	private final int channelId; // Id of the created channel
 
 	private State state;
+	private Map<Integer, Integer> operationSequence; // sequence of operations <Instance, Sqn>
 	private List<Host> membership;
 	private Queue<OrderRequest> pendingRequests; // maybe order by operationId with SortedMap
 	private int nextInstance;
@@ -155,8 +157,8 @@ public class StateMachine extends GenericProtocol {
 			Collections.shuffle(initialMembership);
 			Host connectedHost = initialMembership.get(0);
 			openConnection(connectedHost);
-			// self or connectedHost?
-			sendRequest(new JoinedRequest(connectedHost), StateMachine.PROTOCOL_ID);
+
+			sendRequest(new JoinedRequest(self), StateMachine.PROTOCOL_ID);
 		}
 
 	}
@@ -204,6 +206,7 @@ public class StateMachine extends GenericProtocol {
 		membership = new LinkedList<>(reply.getMembership());
 		membership.forEach(this::openConnection);
 		nextInstance = reply.getInstance();
+
 		sendRequest(new InstallStateRequest(reply.getState()), HashApp.PROTO_ID);
 		// Notifies Agreement Protocol that this replica joined the system
 		triggerNotification(new JoinedNotification(membership, reply.getInstance()));
@@ -241,7 +244,9 @@ public class StateMachine extends GenericProtocol {
 		} else if (nextInstance < notification.getInstance()) { // state machine operation
 			// only executes the operations if it's instance > nextInstance
 			// get currentState first
-			// FAZER uponSMOperationRequest???
+
+			// How to know what replica to add? Is in the operation?
+			// sendRequest(new AddReplicaRequest(nextInstance, ), destination);
 			sendRequest(new CurrentStateRequest(nextInstance), HashApp.PROTO_ID);
 			triggerNotification(new ExecuteNotification(notification.getOpId(), operation));
 		}
