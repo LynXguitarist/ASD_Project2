@@ -199,8 +199,6 @@ public class StateMachine extends GenericProtocol {
 		byte[] operation = Utils.joinByteArray(request.getReplica(), 'f'); // operation, construct the operation???
 		pendingRequests.add(new OrderRequest(UUID.randomUUID(), operation));
 
-		// sendRequest(new ProposeRequest(nextInstance, UUID.randomUUID(), operation),
-		// Paxos.PROTOCOL_ID);
 	}
 
 	private void uponJoinedReply(JoinedReply reply, short sourceProto) {
@@ -239,24 +237,13 @@ public class StateMachine extends GenericProtocol {
 		if (state != State.ACTIVE) { // if it is not ACTIVE, ignores
 			return;
 		} else if (c == 't') { // it's an application operation
-			/*
-			 * OrderRequest orderRequest = pendingRequests.poll(); if (orderRequest != null)
-			 * operation = orderRequest.getOperation(); else operation = op.getOperation();
-			 */
-			sendRequest(new ProposeRequest(nextInstance++, notification.getOpId(), operation), Paxos.PROTOCOL_ID);
+			triggerNotification(new ExecuteNotification(notification.getOpId(), operation));
 		} else if (nextInstance < notification.getInstance()) { // state machine operation
-
 			// only executes the operations if it's instance > nextInstance
 			// get currentState first
-
-			// How to know what replica to add? Is in the operation?
-			// sendRequest(new AddReplicaRequest(nextInstance, ), destination);
-
-			// como ir buscar o host a ser criado
 			membership.forEach(host -> sendRequest(new AddReplicaRequest(nextInstance, host), Paxos.PROTOCOL_ID));
 
 			sendRequest(new CurrentStateRequest(nextInstance), HashApp.PROTO_ID);
-			triggerNotification(new ExecuteNotification(notification.getOpId(), operation));
 		}
 	}
 
@@ -294,6 +281,8 @@ public class StateMachine extends GenericProtocol {
 				e.printStackTrace();
 			}
 		}
+		// remove node from system
+		membership.remove(event.getNode());
 		sendRequest(new RemoveReplicaRequest(event.getId(), event.getNode()), Paxos.PROTOCOL_ID); // ebent.getId() ???
 	}
 
