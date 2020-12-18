@@ -8,37 +8,100 @@ import java.util.Set;
 import java.util.UUID;
 
 public class PaxosState {
+
     int instance;
+    private int sequenceNumber;
+    private UUID proposeValue;
+    private UUID prepareValue;
+    private UUID acceptValue;
+    private int acceptSeq;
+    private int highestPrepare;
+    private int highestAccept;
     private int nrPrepareOk;
     private int nrAcceptOk;
-
-    private UUID newValue;
-
-    private int hal;
-    private int highestPrepare; // highest prepare
-    private int na; // self prepare
-    private UUID va; // value
     private UUID decision; // self decision
     private Set<Pair<Integer, UUID>> aset; // map that learners have of accepted values
-    private int sequenceNumber;
+
 
     public PaxosState(int instance) {
         this.instance=instance;
-        aset = new HashSet<>();
+        proposeValue = null;
+        prepareValue = null;
+        acceptSeq = -1;
+        sequenceNumber = StateMachine.REPLICA_ID;
         highestPrepare = -1;
-        na = -1;
-        va = null;
-        decision = null;
-        hal = -1;
-        newValue = null;
+        highestAccept = -1;
         nrPrepareOk = 0;
         nrAcceptOk = 0;
-        sequenceNumber = StateMachine.REPLICA_ID;
+        acceptValue = null;
+        decision = null;
+        aset = new HashSet<>();
+
     }
 
     public int getSequenceNumber(){ return sequenceNumber; }
 
     public void updateSeqNumber(int numberSeq) {
         this.sequenceNumber = numberSeq;
+    }
+
+    public void updateProposeValue(UUID proposeValue) {
+        this.proposeValue = proposeValue;
+    }
+
+    public int getHighestPrepare() {
+        return highestPrepare;
+    }
+
+    public void setHighestPrepare(int highestPrepare) {
+        this.highestPrepare = highestPrepare;
+    }
+
+    public UUID getPrepareValue() {
+        return prepareValue;
+    }
+
+    public int getNrPrepareOK() {
+        return nrPrepareOk;
+    }
+
+    public void updateNrPrepareOK(int nrPrepareOK) {
+        this.nrPrepareOk = nrPrepareOK;
+    }
+
+    public void setAcceptValue(UUID acceptValue) {
+        this.acceptValue = acceptValue;
+    }
+
+    public void setAcceptSeq(int acceptSeq) {
+        this.acceptSeq =  acceptSeq;
+    }
+
+    public int getNrAcceptOK() {
+        return nrAcceptOk;
+    }
+
+    public void updateNrAcceptOK(int nrAcceptOK) {
+        this.nrAcceptOk = nrAcceptOK;
+    }
+
+    public void setPrepareValue(UUID proposeValue) {
+        this.proposeValue = proposeValue;
+    }
+
+    public void setDecidedValue(UUID proposeValue) {
+        this.decision = proposeValue;
+    }
+
+    public int getAcceptSeq() {
+        return this.acceptSeq;
+    }
+
+    public Set<Pair<Integer, UUID>> getAset() {
+        return aset;
+    }
+
+    public void setAset(Set<Pair<Integer, UUID>> aset) {
+        this.aset = aset;
     }
 }
