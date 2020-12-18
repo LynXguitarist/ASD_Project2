@@ -7,22 +7,19 @@ import javafx.util.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import protocols.agreement.notifications.DecidedNotification;
 
 
-import protocols.agreement.notifications.JoinedNotification;
-import protocols.agreement.requests.AddReplicaRequest;
 import protocols.paxos.messages.*;
+import protocols.paxos.notifications.DecidedNotification;
+import protocols.paxos.notifications.JoinedNotification;
 import protocols.paxos.requests.AddReplicaRequest;
-import protocols.paxos.requests.DecideRequest;
 import protocols.paxos.requests.ProposeRequest;
-import protocols.agreement.requests.RemoveReplicaRequest;
+import protocols.paxos.requests.RemoveReplicaRequest;
 import protocols.statemachine.StateMachine;
 import protocols.statemachine.notifications.ChannelReadyNotification;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
-import pt.unl.fct.di.novasys.babel.generic.ProtoTimer;
 import pt.unl.fct.di.novasys.network.data.Host;
 
 import protocols.paxos.timers.Timer;
@@ -74,7 +71,7 @@ public class Paxos extends GenericProtocol {
     }
 
     private void uponTimer(Timer timer, long timerId) {
-        //TODO
+        uponProposeRequest(timer.getRequest(), timer.getSourceProto());
     }
 
     @Override
@@ -88,7 +85,6 @@ public class Paxos extends GenericProtocol {
             return Integer.compare(o1, o2);
         }
     };
-
 
 
     // Upon receiving the channelId from the membership, register our own callbacks
@@ -148,17 +144,17 @@ public class Paxos extends GenericProtocol {
         logger.debug("Sending to: " + membership);
         int numberSeq;
         PaxosState paxosState = paxosInstances.get(request.getInstance());
+        paxosState.setIsProposer();
         if(paxosState!=null) {
             numberSeq =  paxosState.getSequenceNumber() + MEMBERSHIP_SIZE;
-           paxosState.updateSeqNumber(numberSeq);
+            paxosState.updateSeqNumber(numberSeq);
         } else{
             paxosInstances.put(StateMachine.REPLICA_ID,new PaxosState(request.getInstance()));
             paxosState = paxosInstances.get(StateMachine.REPLICA_ID);
             numberSeq = StateMachine.REPLICA_ID;
         }
 
-        //TRIGGER TIMER
-        Timer t = new Timer(numberSeq);
+        Timer t = new Timer(numberSeq, request, sourceProto );
         setupTimer(t, 10000 );
 
         UUID proposeValue = request.getOpId();
@@ -192,7 +188,7 @@ public class Paxos extends GenericProtocol {
 
         UUID proposeValue = msg.getProposeValue();
         paxosState.updateProposeValue(proposeValue);
-        if (nrPrepareOK >= (MEMBERSHIP_SIZE / 2)) {
+        if (nrPrepareOK > (MEMBERSHIP_SIZE / 2)) {
             AcceptMessage msgAccept = new AcceptMessage(msg.getInstance(), msg.getOpId(),
                     msg.getOp(), paxosState.getSequenceNumber(), proposeValue);
             membership.forEach(h -> sendMessage(msgAccept, h));
@@ -214,24 +210,19 @@ public class Paxos extends GenericProtocol {
         }
     }
 
-    //DUVIDA AQUI
     private void uponAcceptMessage_OK(AcceptMessage_OK msg, Host host, short sourceProto, int channelId) {
         UUID value = msg.getProposeValue();
         int seq = msg.getSeqNumber();
         PaxosState paxosState = paxosInstances.get(msg.getInstance());
-       //PROPOSER STUFF TODO
-        if() {
-
+        if(paxosState.isProposer()) {
             int nrAcceptOK = paxosState.getNrAcceptOK();
             nrAcceptOK++;
             paxosState.updateNrAcceptOK(nrAcceptOK);
 
-            if (nrAcceptOK >= (MEMBERSHIP_SIZE / 2)) {
+            if (nrAcceptOK > (MEMBERSHIP_SIZE / 2)) {
                 paxosState.setPrepareValue(value);
                 paxosState.setDecidedValue(value);
-                DecideRequest decideReq = new DecideRequest(msg.getInstance(), msg.getOpId(),
-                        msg.getOp(), value);
-                //ENVIAR PARA O CLIENTE TODO
+                triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
             }
         } else {
             int highestAccept = paxosState.getAcceptSeq();
@@ -246,11 +237,9 @@ public class Paxos extends GenericProtocol {
             aset.add(new Pair(seq, value));
             paxosState.setAset(aset);
 
-            //MAIOR OU IGUAL OU SO MAIOR
-            if (aset.size() >= (MEMBERSHIP_SIZE / 2)) {
+            if (aset.size() > (MEMBERSHIP_SIZE / 2)) {
                 paxosState.setPrepareValue(value);
                 paxosState.setDecidedValue(value);
-                //TODO
                 triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
             }
         }
@@ -275,7 +264,6 @@ public class Paxos extends GenericProtocol {
         //PaxosInstances.getInstance().removeInstance(request.getInstance());
 
         membership.remove(request.getReplica());
-
         MEMBERSHIP_SIZE = membership.size();
     }
 

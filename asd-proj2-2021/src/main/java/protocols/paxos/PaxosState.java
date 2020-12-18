@@ -20,6 +20,7 @@ public class PaxosState {
     private int nrPrepareOk;
     private int nrAcceptOk;
     private UUID decision; // self decision
+    private boolean isProposer;
     private Set<Pair<Integer, UUID>> aset; // map that learners have of accepted values
 
 
@@ -35,6 +36,7 @@ public class PaxosState {
         nrAcceptOk = 0;
         acceptValue = null;
         decision = null;
+        isProposer = false;
         aset = new HashSet<>();
 
     }
@@ -103,5 +105,13 @@ public class PaxosState {
 
     public void setAset(Set<Pair<Integer, UUID>> aset) {
         this.aset = aset;
+    }
+
+    public boolean isProposer() {
+        return isProposer;
+    }
+
+    public void setIsProposer() {
+        isProposer = true;
     }
 }
