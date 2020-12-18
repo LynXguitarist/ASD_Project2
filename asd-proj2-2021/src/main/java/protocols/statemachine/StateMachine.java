@@ -14,8 +14,8 @@ import utils.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import com.sun.glass.ui.Application;
-
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
 import protocols.statemachine.notifications.ChannelReadyNotification;
 import protocols.app.HashApp;
 import protocols.app.requests.CurrentStateReply;
@@ -34,13 +34,12 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.util.Collections;
-import java.util.HashSet;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Queue;
-import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -88,7 +87,8 @@ public class StateMachine extends GenericProtocol {
 		logger.info("Listening on {}:{}", address, port);
 		this.self = new Host(InetAddress.getByName(address), Integer.parseInt(port));
 		this.pendingRequests = new LinkedList<>();
-
+		this.operationSequence = new HashMap<>();
+		
 		REPLICA_ID = self.getPort(); // port number will be the replica ID
 
 		Properties channelProps = new Properties();
@@ -193,11 +193,20 @@ public class StateMachine extends GenericProtocol {
 	}
 
 	private void uponJoinedRequest(JoinedRequest request, short sourceProto) {
+		request.getReplica();
 		// A replica requested to join the system
 		// Propose a request as a StateMachine operation
+		ByteBuf host = Unpooled.buffer(100);
+		try {
+			// Serialize Host into bytes
+			Host.serializer.serialize(request.getReplica(), host);
+			byte[] operation = Utils.joinByteArray(host.array(), 'f');
 
-		byte[] operation = Utils.joinByteArray(request.getReplica(), 'f'); // operation, construct the operation???
-		pendingRequests.add(new OrderRequest(UUID.randomUUID(), operation));
+			pendingRequests.add(new OrderRequest(UUID.randomUUID(), operation));
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
 	}
 
@@ -230,6 +239,9 @@ public class StateMachine extends GenericProtocol {
 		// or if this is an operations that was executed by the state machine itself (in
 		// which case you should execute)
 
+		// Save operationSequence -- What to save??
+		//operationSequence.put(nextInstance, notification.getInstance());
+		
 		Operation op = Utils.splitByteArray(notification.getOperation());
 		char c = op.getC();
 		byte[] operation = op.getOperation();
@@ -242,10 +254,19 @@ public class StateMachine extends GenericProtocol {
 		} else if (nextInstance < notification.getInstance()) { // state machine operation
 			// only executes the operations if it's instance > nextInstance
 			// get currentState first
-			membership.forEach(host -> sendRequest(new AddReplicaRequest(nextInstance, host), Paxos.PROTOCOL_ID));
+			try {
+				// host to add
+				Host host = Host.serializer.deserialize(Unpooled.wrappedBuffer(operation));
 
-			sendRequest(new CurrentStateRequest(nextInstance), HashApp.PROTO_ID);
-			// nextInstance++;
+				membership.forEach(h -> sendRequest(new AddReplicaRequest(nextInstance, host), Paxos.PROTOCOL_ID));
+
+				membership.add(host);
+				sendRequest(new CurrentStateRequest(nextInstance), HashApp.PROTO_ID);
+				// nextInstance++;
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
 		}
 	}
 
