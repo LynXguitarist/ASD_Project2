@@ -88,7 +88,7 @@ public class StateMachine extends GenericProtocol {
 		this.self = new Host(InetAddress.getByName(address), Integer.parseInt(port));
 		this.pendingRequests = new LinkedList<>();
 		this.operationSequence = new HashMap<>();
-		
+
 		REPLICA_ID = self.getPort(); // port number will be the replica ID
 
 		Properties channelProps = new Properties();
@@ -177,16 +177,15 @@ public class StateMachine extends GenericProtocol {
 			// remember that this operation was issued by the application
 			// (and not an internal operation, check the uponDecidedNotification)
 
-			// Add a char to the operation, to know if is an application or state
-			// operation
 			pendingRequests.add(request);
 			OrderRequest orderRequest = pendingRequests.poll();
 			byte[] operation = null;
 
+			// Add a char to the operation, to know it's an application operation
 			if (orderRequest == null)
-				operation = Utils.joinByteArray(request.getOperation(), 't');
+				operation = Utils.joinByteArray(request.getOperation(), 'a');
 			else
-				operation = orderRequest.getOperation();
+				operation = Utils.joinByteArray(orderRequest.getOperation(), 'a');
 
 			sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), operation), Paxos.PROTOCOL_ID);
 		}
@@ -200,7 +199,7 @@ public class StateMachine extends GenericProtocol {
 		try {
 			// Serialize Host into bytes
 			Host.serializer.serialize(request.getReplica(), host);
-			byte[] operation = Utils.joinByteArray(host.array(), 'f');
+			byte[] operation = Utils.joinByteArray(host.array(), 's');
 
 			pendingRequests.add(new OrderRequest(UUID.randomUUID(), operation));
 		} catch (IOException e) {
@@ -240,15 +239,15 @@ public class StateMachine extends GenericProtocol {
 		// which case you should execute)
 
 		// Save operationSequence -- What to save??
-		//operationSequence.put(nextInstance, notification.getInstance());
-		
+		// operationSequence.put(nextInstance, notification.getInstance());
+
 		Operation op = Utils.splitByteArray(notification.getOperation());
 		char c = op.getC();
 		byte[] operation = op.getOperation();
 
 		if (state != State.ACTIVE) { // if it is not ACTIVE, ignores
 			return;
-		} else if (c == 't') { // it's an application operation
+		} else if (c != 's') { // it's an application operation
 			triggerNotification(new ExecuteNotification(notification.getOpId(), operation));
 			// nextInstance++;
 		} else if (nextInstance < notification.getInstance()) { // state machine operation

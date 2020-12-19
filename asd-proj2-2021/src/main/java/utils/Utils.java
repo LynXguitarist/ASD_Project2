@@ -1,6 +1,5 @@
 package utils;
 
-
 public class Utils {
 
 	/**
@@ -28,6 +27,8 @@ public class Utils {
 
 		String s = new String(c_bytes);
 		char c = s.charAt(0);
+		if (c != 'a' && c != 's')
+			operation = input;
 
 		Operation op = new Operation(c, operation);
 		return op;
