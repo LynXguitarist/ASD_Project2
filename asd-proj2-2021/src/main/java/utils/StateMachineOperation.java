@@ -1,9 +1,16 @@
 package utils;
 
+import java.io.Serializable;
+
 import pt.unl.fct.di.novasys.network.data.Host;
 
-public class StateMachineOperation {
+public class StateMachineOperation implements Serializable {
 
+	/**
+	 * 
+	 */
+	private static final long serialVersionUID = 1L;
+	
 	private Host toAdd, whoAdds;
 
 	public StateMachineOperation(Host toAdd, Host whoAdds) {
