@@ -2,10 +2,9 @@ package protocols.paxos;
 
 import javafx.util.Pair;
 import protocols.statemachine.StateMachine;
+import pt.unl.fct.di.novasys.network.data.Host;
 
-import java.util.HashSet;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 public class PaxosState {
 
@@ -22,10 +21,14 @@ public class PaxosState {
     private UUID decision; // self decision
     private boolean isProposer;
     private Set<Pair<Integer, UUID>> aset; // map that learners have of accepted values
+    //For multi-paxos
+    private int leaderId;
+    private Host leader;
+    private Queue<Pair<UUID, byte[]>> pendingOps;
 
 
     public PaxosState(int instance) {
-        this.instance=instance;
+        this.instance = instance;
         proposeValue = null;
         prepareValue = null;
         acceptSeq = -1;
@@ -38,10 +41,17 @@ public class PaxosState {
         decision = null;
         isProposer = false;
         aset = new HashSet<>();
+        //For multi-paxos
+        leaderId = StateMachine.REPLICA_ID;
+        leader = null;
+        pendingOps = new LinkedList<>();
+
 
     }
 
-    public int getSequenceNumber(){ return sequenceNumber; }
+    public int getSequenceNumber() {
+        return sequenceNumber;
+    }
 
     public void updateSeqNumber(int numberSeq) {
         this.sequenceNumber = numberSeq;
@@ -76,7 +86,7 @@ public class PaxosState {
     }
 
     public void setAcceptSeq(int acceptSeq) {
-        this.acceptSeq =  acceptSeq;
+        this.acceptSeq = acceptSeq;
     }
 
     public int getNrAcceptOK() {
@@ -113,5 +123,41 @@ public class PaxosState {
 
     public void setIsProposer() {
         isProposer = true;
+    }
+
+    public void setLeaderId(int leaderId) {
+        this.leaderId = leaderId;
+    }
+
+    public int getLeaderId() {
+        return leaderId;
+    }
+
+    public void addPendingOp(UUID requestId, byte[] request) {
+        pendingOps.add(new Pair(requestId, request));
+    }
+
+    public void setLeader(Host leader) {
+        this.leader = leader;
+    }
+
+    public Host getLeader() {
+        return leader;
+    }
+
+    public void setIsProposerFalse() {
+        this.isProposer = false;
+    }
+
+    public Pair<UUID, byte[]> getOnePendingOp() {
+        return pendingOps.poll();
+    }
+
+    public Queue<Pair<UUID, byte[]>> getPendingOp() {
+        return pendingOps;
+    }
+
+    public void addAllPendingOp(Queue<Pair<UUID, byte[]>> pendingOp) {
+        pendingOps = pendingOp;
     }
 }

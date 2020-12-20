@@ -8,7 +8,6 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 
-
 import protocols.paxos.messages.*;
 import protocols.paxos.notifications.DecidedNotification;
 import protocols.paxos.notifications.JoinedNotification;
@@ -101,7 +100,6 @@ public class Paxos extends GenericProtocol {
         registerMessageSerializer(cId, PrepareMessage_OK.MSG_ID, PrepareMessage_OK.serializer);
         registerMessageSerializer(cId, AcceptMessage.MSG_ID, AcceptMessage.serializer);
         registerMessageSerializer(cId, AcceptMessage_OK.MSG_ID, AcceptMessage_OK.serializer);
-        registerMessageSerializer(cId, AcceptMessage_LOK.MSG_ID, AcceptMessage_LOK.serializer);
 
         /*---------------------- Register Message Handlers -------------------------- */
         try {
@@ -116,19 +114,20 @@ public class Paxos extends GenericProtocol {
 
 
     }
-/*
-    private void uponBroadcastMessage(BroadcastMessage msg, Host host, short sourceProto, int channelId) {
-        if (joinedInstance >= 0) {
-            // Obviously your agreement protocols will not decide things as soon as you
-            // receive the first message
-            triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
-        } else {
-            // We have not yet received a JoinedNotification, but we are already receiving
-            // messages from the other
-            // agreement instances, maybe we should do something with them...?
+
+    /*
+        private void uponBroadcastMessage(BroadcastMessage msg, Host host, short sourceProto, int channelId) {
+            if (joinedInstance >= 0) {
+                // Obviously your agreement protocols will not decide things as soon as you
+                // receive the first message
+                triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
+            } else {
+                // We have not yet received a JoinedNotification, but we are already receiving
+                // messages from the other
+                // agreement instances, maybe we should do something with them...?
+            }
         }
-    }
-*/
+    */
     private void uponJoinedNotification(JoinedNotification notification, short sourceProto) {
         // We joined the system and can now start doing things
         joinedInstance = notification.getJoinInstance();
@@ -145,17 +144,17 @@ public class Paxos extends GenericProtocol {
         int numberSeq;
         PaxosState paxosState = paxosInstances.get(request.getInstance());
         paxosState.setIsProposer();
-        if(paxosState!=null) {
-            numberSeq =  paxosState.getSequenceNumber() + MEMBERSHIP_SIZE;
+        if (paxosState != null) {
+            numberSeq = paxosState.getSequenceNumber() + MEMBERSHIP_SIZE;
             paxosState.updateSeqNumber(numberSeq);
-        } else{
-            paxosInstances.put(StateMachine.REPLICA_ID,new PaxosState(request.getInstance()));
-            paxosState = paxosInstances.get(StateMachine.REPLICA_ID);
+        } else {
+            paxosInstances.put(request.getInstance(), new PaxosState(request.getInstance()));
+            paxosState = paxosInstances.get(request.getInstance());
             numberSeq = StateMachine.REPLICA_ID;
         }
 
-        Timer t = new Timer(numberSeq, request, sourceProto );
-        setupTimer(t, 10000 );
+        Timer t = new Timer(numberSeq, request, sourceProto);
+        setupTimer(t, 10000);
 
         UUID proposeValue = request.getOpId();
         paxosState.updateProposeValue(proposeValue);
@@ -172,7 +171,7 @@ public class Paxos extends GenericProtocol {
             highestPrepare = seq;
             paxosState.setHighestPrepare(highestPrepare);
             UUID prepareValue = paxosState.getPrepareValue();
-            if(prepareValue != null){
+            if (prepareValue != null) {
                 value = prepareValue;
             }
             PrepareMessage_OK msgPrepare_OK = new PrepareMessage_OK(msg.getInstance(), msg.getOpId(), msg.getOp(), seq, value);
@@ -181,7 +180,7 @@ public class Paxos extends GenericProtocol {
     }
 
     private void uponPrepareMessage_OK(PrepareMessage_OK msg, Host host, short i, int i1) {
-        PaxosState paxosState =  paxosInstances.get(msg.getInstance());
+        PaxosState paxosState = paxosInstances.get(msg.getInstance());
         int nrPrepareOK = paxosState.getNrPrepareOK();
         nrPrepareOK++;
         paxosState.updateNrPrepareOK(nrPrepareOK);
@@ -199,7 +198,7 @@ public class Paxos extends GenericProtocol {
         UUID value = msg.getProposeValue();
         int seq = msg.getSeqNumber();
 
-        PaxosState paxosState =  paxosInstances.get(msg.getInstance());
+        PaxosState paxosState = paxosInstances.get(msg.getInstance());
         int highestPrepare = paxosState.getHighestPrepare();
 
         if (seq >= highestPrepare) {
@@ -214,7 +213,7 @@ public class Paxos extends GenericProtocol {
         UUID value = msg.getProposeValue();
         int seq = msg.getSeqNumber();
         PaxosState paxosState = paxosInstances.get(msg.getInstance());
-        if(paxosState.isProposer()) {
+        if (paxosState.isProposer()) {
             int nrAcceptOK = paxosState.getNrAcceptOK();
             nrAcceptOK++;
             paxosState.updateNrAcceptOK(nrAcceptOK);
@@ -222,17 +221,18 @@ public class Paxos extends GenericProtocol {
             if (nrAcceptOK > (MEMBERSHIP_SIZE / 2)) {
                 paxosState.setPrepareValue(value);
                 paxosState.setDecidedValue(value);
+                paxosState.setIsProposerFalse();
                 triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
             }
         } else {
             int highestAccept = paxosState.getAcceptSeq();
-            Set<Pair<Integer, UUID>> aset =  paxosState.getAset();
+            Set<Pair<Integer, UUID>> aset = paxosState.getAset();
             if (seq > highestAccept) {
                 paxosState.setAcceptSeq(seq);
                 paxosState.setAcceptValue(value);
                 aset.clear();
             } else if (seq < highestAccept) {
-               return ;
+                return;
             }
             aset.add(new Pair(seq, value));
             paxosState.setAset(aset);
