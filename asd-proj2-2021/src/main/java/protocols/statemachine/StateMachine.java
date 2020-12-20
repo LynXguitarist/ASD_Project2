@@ -15,8 +15,6 @@ import utils.Utils;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
 import protocols.statemachine.notifications.ChannelReadyNotification;
 import protocols.app.HashApp;
 import protocols.app.requests.CurrentStateReply;
