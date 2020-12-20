@@ -143,7 +143,7 @@ public class StateMachine extends GenericProtocol {
 
 		if (initialMembership.contains(self)) {
 			state = State.ACTIVE;
-			logger.info("Starting in ACTIVE as I am part of initial membership");
+			logger.debug("Starting in ACTIVE as I am part of initial membership");
 			// I'm part of the initial membership, so I'm assuming the system is
 			// Bootstrapping
 			membership = new LinkedList<>(initialMembership);
@@ -155,7 +155,7 @@ public class StateMachine extends GenericProtocol {
 			// (and copy the state of that instance)
 
 			state = State.JOINING;
-			logger.info("Starting in JOINING as I am not part of initial membership");
+			logger.debug("Starting in JOINING as I am not part of initial membership");
 
 			Collections.shuffle(initialMembership);
 			Host connectedHost = initialMembership.get(0);
@@ -197,7 +197,7 @@ public class StateMachine extends GenericProtocol {
 	private void uponJoinedRequest(JoinedRequest request, short sourceProto) {
 		// A replica requested to join the system
 		// Propose a request as a StateMachine operation
-		logger.info("Request to join by: " + request.getReplica());
+		logger.debug("Request to join by: " + request.getReplica());
 		try {
 			// mudar nome
 			byte[] tmp = Utils.convertToBytes(new StateMachineOperation(request.getReplica(), self));
@@ -213,7 +213,7 @@ public class StateMachine extends GenericProtocol {
 	private void uponJoinedReply(JoinedReply reply, short sourceProto) {
 		// This replica joined the system
 		// The replica that replied sent the instance, state and membership
-		logger.info("Joined in instance: " + reply.getInstance());
+		logger.debug("Joined in instance: " + reply.getInstance());
 
 		membership = new LinkedList<>(reply.getMembership());
 		membership.forEach(this::openConnection);
@@ -227,7 +227,7 @@ public class StateMachine extends GenericProtocol {
 	private void uponCurrentStateReply(CurrentStateReply reply, short sourceProto) {
 		// Receives the reply from the Application
 		// Sends reply to the replica that requested to Join the system(JoinedReply)
-		logger.info("Got the state of the system in instance: " + reply.getInstance());
+		logger.debug("Got the state of the system in instance: " + reply.getInstance());
 
 		sendReply(new JoinedReply(nextInstance, membership, reply.getState()), StateMachine.PROTOCOL_ID);
 	}
@@ -252,13 +252,13 @@ public class StateMachine extends GenericProtocol {
 		if (state != State.ACTIVE) { // if it is not ACTIVE, ignores
 			return;
 		} else if (c != 's') { // it's an application operation
-			logger.info("Application operation");
+			logger.debug("Application operation");
 			triggerNotification(new ExecuteNotification(notification.getOpId(), operation));
 			// nextInstance++;
 		} else if (nextInstance < notification.getInstance()) { // state machine operation
 			// only executes the operations if it's instance > nextInstance
 			// get currentState first
-			logger.info("StateMachine operation");
+			logger.debug("StateMachine operation");
 			try {
 				StateMachineOperation st = (StateMachineOperation) Utils.convertFromBytes(operation);
 
@@ -317,7 +317,7 @@ public class StateMachine extends GenericProtocol {
 	}
 
 	private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
-		logger.info("Connection to {} is up", event.getNode());
+		logger.debug("Connection to {} is up", event.getNode());
 	}
 
 	private void uponOutConnectionDown(OutConnectionDown event, int channelId) {

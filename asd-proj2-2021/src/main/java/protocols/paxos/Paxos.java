@@ -69,7 +69,7 @@ public class Paxos extends GenericProtocol {
 	}
 
 	private void uponTimer(Timer timer, long timerId) {
-		logger.info("Timer running...");
+		logger.debug("Timer running...");
 		uponProposeRequest(timer.getRequest(), timer.getSourceProto());
 	}
 
@@ -90,7 +90,7 @@ public class Paxos extends GenericProtocol {
 	private void uponChannelCreated(ChannelReadyNotification notification, short sourceProto) {
 		int cId = notification.getChannelId();
 		myself = notification.getMyself();
-		logger.info("Channel {} created, I am {}", cId, myself);
+		logger.debug("Channel {} created, I am {}", cId, myself);
 		// Allows this protocol to receive events from this channel.
 		registerSharedChannel(cId);
 
@@ -126,14 +126,14 @@ public class Paxos extends GenericProtocol {
 		joinedInstance = notification.getJoinInstance();
 		membership = new LinkedList<>(notification.getMembership());
 		MEMBERSHIP_SIZE = membership.size();
-		logger.info("Agreement starting at instance {},  membership: {}", joinedInstance, membership);
+		logger.debug("Agreement starting at instance {},  membership: {}", joinedInstance, membership);
 	}
 
 	// ---------------------------------------Paxos_Proposer----------------------------//
 
 	private void uponProposeRequest(ProposeRequest request, short sourceProto) {
-		logger.info("Received " + request);
-		logger.info("Sending to: " + membership);
+		logger.debug("Received " + request);
+		logger.debug("Sending to: " + membership);
 		int numberSeq;
 		PaxosState paxosState = paxosInstances.get(request.getInstance());
 
@@ -159,8 +159,8 @@ public class Paxos extends GenericProtocol {
 	}
 
 	private void uponPrepareMessage(PrepareMessage msg, Host host, short i, int i1) {
-		logger.info("Preparing message: " + msg.getSeqNumber() + " in instance: " + msg.getInstance());
-		logger.info("Proposed value: " + msg.getProposeValue());
+		logger.debug("Preparing message: " + msg.getSeqNumber() + " in instance: " + msg.getInstance());
+		logger.debug("Proposed value: " + msg.getProposeValue());
 		int seq = msg.getSeqNumber();
 		UUID value = msg.getProposeValue();
 		PaxosState paxosState = paxosInstances.get(msg.getInstance());
@@ -179,8 +179,8 @@ public class Paxos extends GenericProtocol {
 	}
 
 	private void uponPrepareMessage_OK(PrepareMessage_OK msg, Host host, short i, int i1) {
-		logger.info("Preparing message_OK: " + msg.getSeqNumber() + " in instance: " + msg.getInstance());
-		logger.info("Proposed value: " + msg.getProposeValue());
+		logger.debug("Preparing message_OK: " + msg.getSeqNumber() + " in instance: " + msg.getInstance());
+		logger.debug("Proposed value: " + msg.getProposeValue());
 		PaxosState paxosState = paxosInstances.get(msg.getInstance());
 		int nrPrepareOK = paxosState.getNrPrepareOK();
 		nrPrepareOK++;
@@ -196,8 +196,8 @@ public class Paxos extends GenericProtocol {
 	}
 
 	private void uponAcceptMessage(AcceptMessage msg, Host host, short i, int i1) {
-		logger.info("Accepting message: " + msg.getSeqNumber() + " in instance: " + msg.getInstance());
-		logger.info("Proposed value: " + msg.getProposeValue());
+		logger.debug("Accepting message: " + msg.getSeqNumber() + " in instance: " + msg.getInstance());
+		logger.debug("Proposed value: " + msg.getProposeValue());
 		UUID value = msg.getProposeValue();
 		int seq = msg.getSeqNumber();
 
@@ -214,8 +214,8 @@ public class Paxos extends GenericProtocol {
 	}
 
 	private void uponAcceptMessage_OK(AcceptMessage_OK msg, Host host, short sourceProto, int channelId) {
-		logger.info("Accepting message_OK: " + msg.getSeqNumber() + " in instance: " + msg.getInstance());
-		logger.info("Proposed value: " + msg.getProposeValue());
+		logger.debug("Accepting message_OK: " + msg.getSeqNumber() + " in instance: " + msg.getInstance());
+		logger.debug("Proposed value: " + msg.getProposeValue());
 		UUID value = msg.getProposeValue();
 		int seq = msg.getSeqNumber();
 		PaxosState paxosState = paxosInstances.get(msg.getInstance());
