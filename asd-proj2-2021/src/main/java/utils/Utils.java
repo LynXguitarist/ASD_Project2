@@ -19,12 +19,16 @@ public class Utils {
 	 */
 	public static byte[] joinByteArray(byte[] operation, char c) {
 
-		byte[] result = new byte[operation.length + 2];
+		ByteArrayOutputStream output = new ByteArrayOutputStream();
+		try {
+			output.write(operation);
+			output.write(c);
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
 
-		System.arraycopy(operation, 0, result, 0, operation.length);
-		System.arraycopy(c, 0, result, operation.length, 2);
-
-		return result;
+		return output.toByteArray();
 	}
 
 	public static Operation splitByteArray(byte[] input) {
