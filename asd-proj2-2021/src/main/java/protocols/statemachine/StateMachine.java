@@ -9,6 +9,7 @@ import pt.unl.fct.di.novasys.channel.tcp.TCPChannel;
 import pt.unl.fct.di.novasys.channel.tcp.events.*;
 import pt.unl.fct.di.novasys.network.data.Host;
 import utils.Operation;
+import utils.StateMachineOperation;
 import utils.Utils;
 
 import org.apache.logging.log4j.LogManager;
@@ -192,21 +193,19 @@ public class StateMachine extends GenericProtocol {
 	}
 
 	private void uponJoinedRequest(JoinedRequest request, short sourceProto) {
-		request.getReplica();
 		// A replica requested to join the system
 		// Propose a request as a StateMachine operation
-		ByteBuf host = Unpooled.buffer(100);
+
 		try {
-			// Serialize Host into bytes
-			Host.serializer.serialize(request.getReplica(), host);
-			byte[] operation = Utils.joinByteArray(host.array(), 's');
+			// mudar nome
+			byte[] tmp = Utils.convertToBytes(new StateMachineOperation(request.getReplica(), self));
+			byte[] operation = Utils.joinByteArray(tmp, 's');
 
 			pendingRequests.add(new OrderRequest(UUID.randomUUID(), operation));
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-
 	}
 
 	private void uponJoinedReply(JoinedReply reply, short sourceProto) {
@@ -254,15 +253,17 @@ public class StateMachine extends GenericProtocol {
 			// only executes the operations if it's instance > nextInstance
 			// get currentState first
 			try {
-				// host to add
-				Host host = Host.serializer.deserialize(Unpooled.wrappedBuffer(operation));
+				StateMachineOperation st = (StateMachineOperation) Utils.convertFromBytes(operation);
 
-				membership.forEach(h -> sendRequest(new AddReplicaRequest(nextInstance, host), Paxos.PROTOCOL_ID));
+				Host host = st.getToAdd();
+				if (st.getToAdd() == self || st.getToAdd().equals(self)) {
+					membership.forEach(h -> sendRequest(new AddReplicaRequest(nextInstance, host), Paxos.PROTOCOL_ID));
 
-				membership.add(host);
-				sendRequest(new CurrentStateRequest(nextInstance), HashApp.PROTO_ID);
+					membership.add(host);
+					sendRequest(new CurrentStateRequest(nextInstance), HashApp.PROTO_ID);
+				}
 				// nextInstance++;
-			} catch (IOException e) {
+			} catch (IOException | ClassNotFoundException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
