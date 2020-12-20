@@ -182,16 +182,19 @@ public class Paxos extends GenericProtocol {
 		logger.debug("Preparing message_OK: " + msg.getSeqNumber() + " in instance: " + msg.getInstance());
 		logger.debug("Proposed value: " + msg.getProposeValue());
 		PaxosState paxosState = paxosInstances.get(msg.getInstance());
-		int nrPrepareOK = paxosState.getNrPrepareOK();
-		nrPrepareOK++;
-		paxosState.updateNrPrepareOK(nrPrepareOK);
 
-		UUID proposeValue = msg.getProposeValue();
-		paxosState.updateProposeValue(proposeValue);
-		if (nrPrepareOK > (MEMBERSHIP_SIZE / 2)) {
-			AcceptMessage msgAccept = new AcceptMessage(msg.getInstance(), msg.getOpId(), msg.getOp(),
-					paxosState.getSequenceNumber(), proposeValue);
-			membership.forEach(h -> sendMessage(msgAccept, h));
+		if (msg.getSeqNumber() == paxosState.getSequenceNumber()) {
+			int nrPrepareOK = paxosState.getNrPrepareOK();
+			nrPrepareOK++;
+			paxosState.updateNrPrepareOK(nrPrepareOK);
+
+			UUID proposeValue = msg.getProposeValue();
+			paxosState.updateProposeValue(proposeValue);
+			if (nrPrepareOK > (MEMBERSHIP_SIZE / 2)) {
+				AcceptMessage msgAccept = new AcceptMessage(msg.getInstance(), msg.getOpId(), msg.getOp(),
+						paxosState.getSequenceNumber(), proposeValue);
+				membership.forEach(h -> sendMessage(msgAccept, h));
+			}
 		}
 	}
 
@@ -220,15 +223,17 @@ public class Paxos extends GenericProtocol {
 		int seq = msg.getSeqNumber();
 		PaxosState paxosState = paxosInstances.get(msg.getInstance());
 		if (paxosState.isProposer()) {
-			int nrAcceptOK = paxosState.getNrAcceptOK();
-			nrAcceptOK++;
-			paxosState.updateNrAcceptOK(nrAcceptOK);
+			if (msg.getSeqNumber() == paxosState.getSequenceNumber()) {
+				int nrAcceptOK = paxosState.getNrAcceptOK();
+				nrAcceptOK++;
+				paxosState.updateNrAcceptOK(nrAcceptOK);
 
-			if (nrAcceptOK > (MEMBERSHIP_SIZE / 2)) {
-				paxosState.setPrepareValue(value);
-				paxosState.setDecidedValue(value);
-				paxosState.setIsProposerFalse();
-				triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
+				if (nrAcceptOK > (MEMBERSHIP_SIZE / 2)) {
+					paxosState.setPrepareValue(value);
+					paxosState.setDecidedValue(value);
+					paxosState.setIsProposerFalse();
+					triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
+				}
 			}
 		} else {
 			int highestAccept = paxosState.getAcceptSeq();
