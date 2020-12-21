@@ -1,0 +1,8 @@
+sh exec.sh 2 10 localhost:6000,localhost:6001 1 1
+
+ou
+
+sh exec.sh 2 10 localhost:6000 50 50
+
+Para testes
+OVERALL, READ E UPDATE
