@@ -180,17 +180,17 @@ public class StateMachine extends GenericProtocol {
 			// remember that this operation was issued by the application
 			// (and not an internal operation, check the uponDecidedNotification)
 
-			pendingRequests.add(request);
-			OrderRequest orderRequest = pendingRequests.poll();
 			byte[] operation = null;
+			operation = Utils.joinByteArray(request.getOperation(), 'a');
 
-			// Add a char to the operation, to know it's an application operation
-			if (orderRequest == null)
-				operation = Utils.joinByteArray(request.getOperation(), 'a');
-			else
-				operation = Utils.joinByteArray(orderRequest.getOperation(), 'a');
+			pendingRequests.add(new OrderRequest(request.getOpId(), operation));
 
-			sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), operation), Paxos.PROTOCOL_ID);
+			// only this request in queue
+			if (pendingRequests.size() == 1) {
+				OrderRequest orderRequest = pendingRequests.poll();
+
+				sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), operation), Paxos.PROTOCOL_ID);
+			}
 		}
 	}
 
@@ -275,6 +275,9 @@ public class StateMachine extends GenericProtocol {
 				e.printStackTrace();
 			}
 		}
+		OrderRequest orderRequest = pendingRequests.poll();
+
+		sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), operation), Paxos.PROTOCOL_ID);
 	}
 
 	/*--------------------------------- Multi-Paxos ---------------------------------------- */
