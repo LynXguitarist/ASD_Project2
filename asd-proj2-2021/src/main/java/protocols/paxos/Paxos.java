@@ -138,9 +138,11 @@ public class Paxos extends GenericProtocol {
 		PaxosState paxosState = paxosInstances.get(request.getInstance());
 
 		if (paxosState != null) {
+			logger.debug("PaxosState for instance " + request.getInstance() + " already exists");
 			numberSeq = paxosState.getSequenceNumber() + MEMBERSHIP_SIZE;
 			paxosState.updateSeqNumber(numberSeq);
 		} else {
+			logger.debug("Instance " + request.getInstance() + " created in PaxosState");
 			paxosInstances.put(request.getInstance(), new PaxosState(request.getInstance()));
 			paxosState = paxosInstances.get(request.getInstance());
 			numberSeq = StateMachine.REPLICA_ID;

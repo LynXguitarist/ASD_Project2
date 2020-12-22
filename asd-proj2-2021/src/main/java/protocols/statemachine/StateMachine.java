@@ -254,7 +254,7 @@ public class StateMachine extends GenericProtocol {
 		} else if (c != 's') { // it's an application operation
 			logger.debug("Application operation");
 			triggerNotification(new ExecuteNotification(notification.getOpId(), operation));
-			// nextInstance++;
+			nextInstance++;
 		} else if (nextInstance < notification.getInstance()) { // state machine operation
 			// only executes the operations if it's instance > nextInstance
 			// get currentState first
@@ -269,7 +269,7 @@ public class StateMachine extends GenericProtocol {
 					membership.add(host);
 					sendRequest(new CurrentStateRequest(nextInstance), HashApp.PROTO_ID);
 				}
-				// nextInstance++;
+				nextInstance++;
 			} catch (IOException | ClassNotFoundException e) {
 				// TODO Auto-generated catch block
 				e.printStackTrace();

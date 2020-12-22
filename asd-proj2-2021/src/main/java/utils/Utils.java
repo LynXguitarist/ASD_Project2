@@ -35,7 +35,7 @@ public class Utils {
 
 		byte[] operation = new byte[input.length - 2];
 		byte[] c_bytes = new byte[2];
-		System.arraycopy(input, 0, c_bytes, operation.length, input.length);
+		System.arraycopy(input, 0, c_bytes, operation.length, 2);
 
 		String s = new String(c_bytes);
 		char c = s.charAt(0);
