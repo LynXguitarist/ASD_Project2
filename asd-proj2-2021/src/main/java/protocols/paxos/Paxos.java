@@ -166,6 +166,10 @@ public class Paxos extends GenericProtocol {
 		int seq = msg.getSeqNumber();
 		UUID value = msg.getProposeValue();
 		PaxosState paxosState = paxosInstances.get(msg.getInstance());
+		if(paxosState == null){
+			paxosInstances.put(msg.getInstance(), new PaxosState(msg.getInstance()));
+			paxosState = paxosInstances.get(msg.getInstance());
+		}
 		int highestPrepare = paxosState.getHighestPrepare();
 		if (seq > highestPrepare) {
 			highestPrepare = seq;

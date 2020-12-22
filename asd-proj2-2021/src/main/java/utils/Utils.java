@@ -33,9 +33,9 @@ public class Utils {
 
 	public static Operation splitByteArray(byte[] input) {
 
-		byte[] operation = new byte[input.length - 2];
-		byte[] c_bytes = new byte[2];
-		System.arraycopy(input, 0, c_bytes, operation.length, 2);
+		byte[] operation = new byte[input.length - 1];
+		byte[] c_bytes = new byte[1];
+		System.arraycopy(input,  operation.length, c_bytes,0, 1);
 
 		String s = new String(c_bytes);
 		char c = s.charAt(0);
