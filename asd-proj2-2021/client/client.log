@@ -1,11 +1,5 @@
-<<<<<<< Updated upstream
-2020-12-22 18:05:45:035 0 sec: 0 operations; est completion in 0 second 
-2020-12-22 18:05:49:967 5 sec: 359 operations; 71,71 current ops/sec; est completion in 1 hour 9 minutes [READ AverageLatency(us)=9811,08] [UPDATE AverageLatency(us)=9085,9] 
-2020-12-22 18:05:54:964 10 sec: 1183 operations; 164,9 current ops/sec; est completion in 42 minutes [READ AverageLatency(us)=5877,91] [UPDATE AverageLatency(us)=6142,93] 
-=======
-2020-12-22 13:45:25:751 0 sec: 0 operations; est completion in 0 second 
-2020-12-22 13:45:30:722 5 sec: 0 operations; est completion in 106751991167300 days 15 hours 
-2020-12-22 13:45:35:733 10 sec: 0 operations; est completion in 106751991167300 days 15 hours 
+2020-12-22 18:19:18:707 0 sec: 0 operations; est completion in 0 second 
+2020-12-22 18:19:23:686 5 sec: 0 operations; est completion in 106751991167300 days 15 hours 
+2020-12-22 18:19:28:681 10 sec: 0 operations; est completion in 106751991167300 days 15 hours 
 Op Timed out...127.0.0.1:6000 1
->>>>>>> Stashed changes
 Op Timed out...127.0.0.1:6000 2

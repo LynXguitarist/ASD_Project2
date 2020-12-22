@@ -276,8 +276,8 @@ public class StateMachine extends GenericProtocol {
 			}
 		}
 		OrderRequest orderRequest = pendingRequests.poll();
-
-		sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), operation), Paxos.PROTOCOL_ID);
+		if (orderRequest != null)
+			sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), operation), Paxos.PROTOCOL_ID);
 	}
 
 	/*--------------------------------- Multi-Paxos ---------------------------------------- */
