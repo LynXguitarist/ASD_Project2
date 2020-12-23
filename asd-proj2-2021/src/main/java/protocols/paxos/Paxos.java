@@ -228,6 +228,10 @@ public class Paxos extends GenericProtocol {
 		UUID value = msg.getProposeValue();
 		int seq = msg.getSeqNumber();
 		PaxosState paxosState = paxosInstances.get(msg.getInstance());
+		if(paxosState == null){
+			paxosInstances.put(msg.getInstance(), new PaxosState(msg.getInstance()));
+			paxosState = paxosInstances.get(msg.getInstance());
+		}
 		if (paxosState.isProposer()) {
 			if (msg.getSeqNumber() == paxosState.getSequenceNumber()) {
 				int nrAcceptOK = paxosState.getNrAcceptOK();

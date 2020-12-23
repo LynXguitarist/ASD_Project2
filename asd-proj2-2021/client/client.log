@@ -1,5 +1,4 @@
-2020-12-22 18:19:18:707 0 sec: 0 operations; est completion in 0 second 
-2020-12-22 18:19:23:686 5 sec: 0 operations; est completion in 106751991167300 days 15 hours 
-2020-12-22 18:19:28:681 10 sec: 0 operations; est completion in 106751991167300 days 15 hours 
-Op Timed out...127.0.0.1:6000 1
+2020-12-23 11:20:09:863 0 sec: 0 operations; est completion in 0 second 
+2020-12-23 11:20:14:783 5 sec: 1 operations; 0,2 current ops/sec; est completion in 2 days 21 hours [READ AverageLatency(us)=104006] 
+2020-12-23 11:20:19:785 10 sec: 1 operations; 0 current ops/sec; est completion in 5 days 18 hours  
 Op Timed out...127.0.0.1:6000 2
