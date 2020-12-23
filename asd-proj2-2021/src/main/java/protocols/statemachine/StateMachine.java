@@ -49,7 +49,7 @@ public class StateMachine extends GenericProtocol {
 	public static int REPLICA_ID;
 
 	private enum State {
-		JOINING, ACTIVE // INACTIVE
+		JOINING, ACTIVE
 	}
 
 	// Protocol information, to register in babel
@@ -141,9 +141,6 @@ public class StateMachine extends GenericProtocol {
 			membership.forEach(this::openConnection);
 			triggerNotification(new JoinedNotification(membership, 0));
 		} else {
-			// You have to do something to join the system and know which instance you
-			// joined
-			// (and copy the state of that instance)
 
 			state = State.JOINING;
 			logger.debug("Starting in JOINING as I am not part of initial membership");
@@ -161,15 +158,8 @@ public class StateMachine extends GenericProtocol {
 	private void uponOrderRequest(OrderRequest request, short sourceProto) {
 		logger.debug("Received request: " + request);
 		if (state == State.JOINING) {
-			// Do something smart (like buffering the requests)
-			pendingRequests.add(request); // right???
+			pendingRequests.add(request);
 		} else if (state == State.ACTIVE) {
-			// Also do something smart, we don't want an infinite number of instances
-			// active
-
-			// Maybe you should modify what is it that you are proposing so that you
-			// remember that this operation was issued by the application
-			// (and not an internal operation, check the uponDecidedNotification)
 
 			byte[] operation = null;
 			operation = Utils.joinByteArray(request.getOperation(), 'a');
@@ -195,7 +185,6 @@ public class StateMachine extends GenericProtocol {
 
 			pendingRequests.add(new OrderRequest(UUID.randomUUID(), operation));
 		} catch (IOException e) {
-			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
@@ -225,15 +214,6 @@ public class StateMachine extends GenericProtocol {
 	/*--------------------------------- Notifications ---------------------------------------- */
 	private void uponDecidedNotification(DecidedNotification notification, short sourceProto) {
 		logger.debug("Received notification: " + notification);
-		// Maybe we should make sure operations are executed in order?
-
-		// You should be careful and check if this operation is an application operation
-		// (and send it up)
-		// or if this is an operations that was executed by the state machine itself (in
-		// which case you should execute)
-
-		// Save operationSequence -- What to save??
-		// operationSequence.put(nextInstance, notification.getInstance());
 
 		Operation op = Utils.splitByteArray(notification.getOperation());
 		char c = op.getC();
@@ -261,7 +241,6 @@ public class StateMachine extends GenericProtocol {
 				}
 				nextInstance++;
 			} catch (IOException | ClassNotFoundException e) {
-				// TODO Auto-generated catch block
 				e.printStackTrace();
 			}
 		}
@@ -272,9 +251,7 @@ public class StateMachine extends GenericProtocol {
 
 	/*--------------------------------- Multi-Paxos ---------------------------------------- */
 	private void uponChangeLeader(DecidedNotification notification, short sourceProto) {
-		// For Multi-Paxos
-		// Change type of notification
-		// a partir dos 15 min Multi Paxos Lab 7
+
 	}
 
 	/*--------------------------------- Messages ---------------------------------------- */

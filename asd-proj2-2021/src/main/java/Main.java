@@ -1,3 +1,4 @@
+import protocols.paxos.MultiPaxos;
 import pt.unl.fct.di.novasys.babel.core.Babel;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -44,8 +45,10 @@ public class Main {
         HashApp hashApp = new HashApp(props);
         // StateMachine Protocol
         StateMachine sm = new StateMachine(props);
+
         // Agreement Protocol
         Paxos agreement = new Paxos(props);
+        //MultiPaxos agreement = new MultiPaxos(props);
 
         //Register applications in babel
         babel.registerProtocol(hashApp);

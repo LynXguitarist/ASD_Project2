@@ -89,7 +89,7 @@ public class HashApp extends GenericProtocol {
 	}
 
 	private void uponCurrentStateRequest(CurrentStateRequest req, short sourceProto) {
-		logger.info("CurrStaetRequest from Instance: " + req.getInstance());
+		logger.info("CurrentRequest from Instance: " + req.getInstance());
 		byte[] state;
 		try {
 			state = this.getCurrentState();

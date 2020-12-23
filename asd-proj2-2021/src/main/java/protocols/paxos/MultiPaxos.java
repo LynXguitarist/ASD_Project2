@@ -22,17 +22,11 @@ import protocols.statemachine.notifications.ChannelReadyNotification;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
-import pt.unl.fct.di.novasys.babel.generic.ProtoTimer;
 import pt.unl.fct.di.novasys.network.data.Host;
 
 import protocols.paxos.timers.Timer;
 
-/*
- * Proposer sends proposal to acceptor
- * proposal is selected when majority of acceptors accept it (f < N/2)
- * Sequence Number(psn) = instanceNumber
- * A proposed value that was accepted by a majority of acceptors is said to be locked in
- */
+
 public class MultiPaxos extends GenericProtocol {
 
     private static final Logger logger = LogManager.getLogger(Paxos.class);
@@ -45,9 +39,6 @@ public class MultiPaxos extends GenericProtocol {
     private int joinedInstance;
     private List<Host> membership;
     private int MEMBERSHIP_SIZE;
-
-    private Map<Integer, UUID> proposals; // <proposal_sn, value>
-
 
     private Map<Integer, PaxosState> paxosInstances;
 
@@ -86,15 +77,11 @@ public class MultiPaxos extends GenericProtocol {
     }
 
     private void uponTimerLeaderAlive(TimerLeaderAlive timer, long timerId) {
-        //prepare om nr seq mais alto
-        //TODO
+
         PaxosState paxosState = paxosInstances.get(timer.getInstance());
         int numberSeq = paxosState.getSequenceNumber() + MEMBERSHIP_SIZE;
         paxosState.updateSeqNumber(numberSeq);
         Pair<UUID, byte[]> pendingOp = paxosState.getOnePendingOp();
-
-        //ACHO QUE NAO É NECESSARIO
-        //setupTimer(new Timer(numberSeq, request, sourceProto), 10000);
 
         UUID proposeValue = pendingOp.getKey();
         paxosState.updateProposeValue(proposeValue);
@@ -103,7 +90,7 @@ public class MultiPaxos extends GenericProtocol {
 
     }
 
-    //Envia NO OP
+
     private void uponTimerNoOp(TimerNoOp timer, long timerId) {
         AcceptMessage msgAccept = new AcceptMessage(timer.getInstance(), null,
                 null, timer.getTimerId(), null);
@@ -156,23 +143,8 @@ public class MultiPaxos extends GenericProtocol {
         } catch (HandlerRegistrationException e) {
             throw new AssertionError("Error registering message handler.", e);
         }
-
-
     }
 
-    /*
-        private void uponBroadcastMessage(BroadcastMessage msg, Host host, short sourceProto, int channelId) {
-            if (joinedInstance >= 0) {
-                // Obviously your agreement protocols will not decide things as soon as you
-                // receive the first message
-                triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
-            } else {
-                // We have not yet received a JoinedNotification, but we are already receiving
-                // messages from the other
-                // agreement instances, maybe we should do something with them...?
-            }
-        }
-    */
     private void uponJoinedNotification(JoinedNotification notification, short sourceProto) {
         // We joined the system and can now start doing things
         joinedInstance = notification.getJoinInstance();
@@ -189,15 +161,13 @@ public class MultiPaxos extends GenericProtocol {
     // ---------------------------------------Paxos_Proposer----------------------------//
 
     private void uponProposeRequest(ProposeRequest request, short sourceProto) {
-        //ver se já existe no meu paxos State um lider
-        //caso nao haja entao eu faço prepare dizendo que sou o novo lider
-        //caso haja entao eu nao posso fazer prepare, tenho de enviar as op cliente que recebo para o lider (será neste metodo, ou só adiciona a uma lista??)
+
         logger.debug("Received " + request);
         logger.debug("Sending to: " + membership);
         int numberSeq;
         PaxosState paxosState = paxosInstances.get(request.getInstance());
 
-        //No caso de já existir um lider
+        //If already exists a leader
         Host leader = paxosState.getLeader();
         if (leader != null && !leader.equals(myself)) {
             paxosState.addPendingOp(request.getOpId(), request.getOperation());
@@ -206,7 +176,8 @@ public class MultiPaxos extends GenericProtocol {
 
         } else if (leader.equals(myself)) {
             int seq = paxosState.getSequenceNumber();
-            //reset do timer
+
+            //timer reset
             cancelTimer(seq);
             setupTimer(new TimerNoOp(seq, request.getInstance()), 10000);
 
@@ -230,7 +201,6 @@ public class MultiPaxos extends GenericProtocol {
                 numberSeq = StateMachine.REPLICA_ID;
             }
 
-            //ACHO QUE NAO É NECESSARIO???
             setupTimer(new Timer(numberSeq, request, sourceProto), 10000);
 
             UUID proposeValue = request.getOpId();
@@ -241,17 +211,14 @@ public class MultiPaxos extends GenericProtocol {
     }
 
     private void uponPrepareMessage(PrepareMessage msg, Host host, short i, int i1) {
-        //se replica enviar prepare ok entao significa que esta a concordar com a eleiçao do nobo lider
-        //vou ter que ter um timeout algures para lidar como o facto de uma mensagem demorar demasiado tempo e trocar de lider
         int seq = msg.getSeqNumber();
         UUID value = msg.getProposeValue();
         PaxosState paxosState = paxosInstances.get(msg.getInstance());
         int highestPrepare = paxosState.getHighestPrepare();
         if (seq > highestPrepare) {
 
-            //sera que preciso de guardar o id?
             paxosState.setLeader(host);
-            //iniciar timmer para ver se o lider falha
+
             if (!myself.equals(paxosState.getLeader())) {
                 setupTimer(new TimerLeaderAlive(StateMachine.REPLICA_ID, msg.getInstance()), 10000);
             }
@@ -267,7 +234,7 @@ public class MultiPaxos extends GenericProtocol {
         }
     }
 
-    //TENHO QUE VER SE POSSO INCREMENTAR O NRPREPAREOK  TODO Comparar com o que tenho no meu paxos state
+
     private void uponPrepareMessage_OK(PrepareMessage_OK msg, Host host, short i, int i1) {
 
         PaxosState paxosState = paxosInstances.get(msg.getInstance());
@@ -278,11 +245,12 @@ public class MultiPaxos extends GenericProtocol {
         UUID proposeValue = msg.getProposeValue();
         paxosState.updateProposeValue(proposeValue);
         if (nrPrepareOK > (MEMBERSHIP_SIZE / 2)) {
-            //Replica passa a ser lider
+
+            //Replica becames the leader
             paxosState.setLeaderId(StateMachine.REPLICA_ID);
             paxosState.setLeader(myself);
 
-            //Definir timer para enviar no ops
+            //Setup timer to send NoOP
             setupTimer(new TimerNoOp(paxosState.getSequenceNumber(), msg.getInstance()), 10000);
 
             AcceptMessage msgAccept = new AcceptMessage(msg.getInstance(), msg.getOpId(),
@@ -328,7 +296,7 @@ public class MultiPaxos extends GenericProtocol {
                 paxosState.setPrepareValue(value);
                 paxosState.setDecidedValue(value);
 
-                //tratar de começar numa nova instancia
+
                 int newInstance = msg.getInstance() + 1;
                 paxosInstances.put(newInstance, new PaxosState(newInstance));
                 Queue<Pair<UUID, byte[]>> pendingOps = paxosState.getPendingOp();
@@ -339,12 +307,9 @@ public class MultiPaxos extends GenericProtocol {
                 Pair<UUID, byte[]> pendingOp = newPaxosState.getOnePendingOp();
                 newPaxosState.updateProposeValue(pendingOp.getKey());
                 AcceptMessage msgAccept = new AcceptMessage(newInstance, pendingOp.getKey(),
-                        pendingOp.getValue(), newPaxosState.getSequenceNumber(),  pendingOp.getKey());
+                        pendingOp.getValue(), newPaxosState.getSequenceNumber(), pendingOp.getKey());
                 membership.forEach(h -> sendMessage(msgAccept, h));
 
-
-
-                //Copiar o estado de uma instancia para a outa
                 triggerNotification(new DecidedNotification(msg.getInstance(), msg.getOpId(), msg.getOp()));
             }
         } else {
@@ -370,29 +335,19 @@ public class MultiPaxos extends GenericProtocol {
 
     private void uponAddReplica(AddReplicaRequest request, short sourceProto) {
         logger.debug("Received " + request);
-        // The AddReplicaRequest contains an "instance" field, which we ignore in this
-        // incorrect protocol.
-        // You should probably take it into account while doing whatever you do here.
 
         membership.add(request.getReplica());
-        //PaxosState ps = PaxosInstances.getInstance().getPaxosInstance(request.getInstance());
-        //installState(ps);
     }
 
     private void uponRemoveReplica(RemoveReplicaRequest request, short sourceProto) {
         logger.debug("Received " + request);
-        // The RemoveReplicaRequest contains an "instance" field, which we ignore in
-        // this incorrect protocol.
-        // You should probably take it into account while doing whatever you do here.
-        //PaxosInstances.getInstance().removeInstance(request.getInstance());
 
         membership.remove(request.getReplica());
         MEMBERSHIP_SIZE = membership.size();
     }
 
     private void uponMsgFail(ProtoMessage msg, Host host, short destProto, Throwable throwable, int channelId) {
-        // If a message fails to be sent, for whatever reason, log the message and the
-        // reason
+        // If a message fails to be sent, for whatever reason, log the message and the reason
         logger.error("Message {} to {} failed, reason: {}", msg, host, throwable);
     }
 

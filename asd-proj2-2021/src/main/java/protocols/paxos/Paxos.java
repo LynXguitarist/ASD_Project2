@@ -1,6 +1,5 @@
 package protocols.paxos;
 
-import java.io.IOException;
 import java.util.*;
 
 import javafx.util.Pair;
@@ -22,12 +21,6 @@ import pt.unl.fct.di.novasys.network.data.Host;
 
 import protocols.paxos.timers.Timer;
 
-/*
- * Proposer sends proposal to acceptor
- * proposal is selected when majority of acceptors accept it (f < N/2)
- * Sequence Number(psn) = instanceNumber
- * A proposed value that was accepted by a majority of acceptors is said to be locked in
- */
 public class Paxos extends GenericProtocol {
 
 	private static final Logger logger = LogManager.getLogger(Paxos.class);
@@ -41,11 +34,9 @@ public class Paxos extends GenericProtocol {
 	private List<Host> membership;
 	private int MEMBERSHIP_SIZE;
 
-	private Map<Integer, UUID> proposals; // <proposal_sn, value>
-
 	private Map<Integer, PaxosState> paxosInstances;
 
-	public Paxos(Properties props) throws IOException, HandlerRegistrationException {
+	public Paxos(Properties props) throws HandlerRegistrationException {
 		super(PROTOCOL_NAME, PROTOCOL_ID);
 		joinedInstance = -1; // -1 means we have not yet joined the system
 		membership = null;
@@ -112,15 +103,7 @@ public class Paxos extends GenericProtocol {
 		}
 	}
 
-	/*
-	 * private void uponBroadcastMessage(BroadcastMessage msg, Host host, short
-	 * sourceProto, int channelId) { if (joinedInstance >= 0) { // Obviously your
-	 * agreement protocols will not decide things as soon as you // receive the
-	 * first message triggerNotification(new DecidedNotification(msg.getInstance(),
-	 * msg.getOpId(), msg.getOp())); } else { // We have not yet received a
-	 * JoinedNotification, but we are already receiving // messages from the other
-	 * // agreement instances, maybe we should do something with them...? } }
-	 */
+
 	private void uponJoinedNotification(JoinedNotification notification, short sourceProto) {
 		// We joined the system and can now start doing things
 		joinedInstance = notification.getJoinInstance();
@@ -268,30 +251,19 @@ public class Paxos extends GenericProtocol {
 
 	private void uponAddReplica(AddReplicaRequest request, short sourceProto) {
 		logger.debug("Received " + request);
-		// The AddReplicaRequest contains an "instance" field, which we ignore in this
-		// incorrect protocol.
-		// You should probably take it into account while doing whatever you do here.
-
 		membership.add(request.getReplica());
-		// PaxosState ps =
-		// PaxosInstances.getInstance().getPaxosInstance(request.getInstance());
-		// installState(ps);
+
 	}
 
 	private void uponRemoveReplica(RemoveReplicaRequest request, short sourceProto) {
 		logger.debug("Received " + request);
-		// The RemoveReplicaRequest contains an "instance" field, which we ignore in
-		// this incorrect protocol.
-		// You should probably take it into account while doing whatever you do here.
-		// PaxosInstances.getInstance().removeInstance(request.getInstance());
 
 		membership.remove(request.getReplica());
 		MEMBERSHIP_SIZE = membership.size();
 	}
 
 	private void uponMsgFail(ProtoMessage msg, Host host, short destProto, Throwable throwable, int channelId) {
-		// If a message fails to be sent, for whatever reason, log the message and the
-		// reason
+		// If a message fails to be sent, for whatever reason, log the message and the reason
 		logger.error("Message {} to {} failed, reason: {}", msg, host, throwable);
 	}
 
