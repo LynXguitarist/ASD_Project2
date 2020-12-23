@@ -42,302 +42,290 @@ import java.util.Properties;
 import java.util.Queue;
 import java.util.UUID;
 
-
 public class StateMachine extends GenericProtocol {
-    private static final Logger logger = LogManager.getLogger(StateMachine.class);
+	private static final Logger logger = LogManager.getLogger(StateMachine.class);
 
-    // Replica id
-    public static int REPLICA_ID;
+	// Replica id
+	public static int REPLICA_ID;
 
-    private enum State {
-        JOINING, ACTIVE // INACTIVE
-    }
+	private enum State {
+		JOINING, ACTIVE // INACTIVE
+	}
 
-    // Protocol information, to register in babel
-    public static final String PROTOCOL_NAME = "StateMachine";
-    public static final short PROTOCOL_ID = 200;
+	// Protocol information, to register in babel
+	public static final String PROTOCOL_NAME = "StateMachine";
+	public static final short PROTOCOL_ID = 200;
 
-    private final Host self; // My own address/port
-    private final int channelId; // Id of the created channel
+	private final Host self; // My own address/port
+	private final int channelId; // Id of the created channel
 
-    private State state;
-    private Map<Integer, Integer> operationSequence; // sequence of operations <Instance, Sqn>
-    private List<Host> membership;
-    private Queue<OrderRequest> pendingRequests; // maybe order by operationId with SortedMap
-    private List<Host> triedToConnect;
-    private int nextInstance;
+	private State state;
+	private Map<Integer, Integer> operationSequence; // sequence of operations <Instance, Sqn>
+	private Map<Host, Short> numRetries;
+	private List<Host> membership;
+	private Queue<OrderRequest> pendingRequests; // maybe order by operationId with SortedMap
 
-    public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
-        super(PROTOCOL_NAME, PROTOCOL_ID);
-        nextInstance = 0;
+	private int nextInstance;
 
-        String address = props.getProperty("address");
-        String port = props.getProperty("p2p_port");
+	public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
+		super(PROTOCOL_NAME, PROTOCOL_ID);
+		nextInstance = 0;
 
-        logger.info("Listening on {}:{}", address, port);
-        this.self = new Host(InetAddress.getByName(address), Integer.parseInt(port));
-        this.pendingRequests = new LinkedList<>();
-        this.operationSequence = new HashMap<>();
-        this.triedToConnect = new LinkedList<>();
+		String address = props.getProperty("address");
+		String port = props.getProperty("p2p_port");
 
-        REPLICA_ID = self.getPort(); // port number will be the replica ID
+		logger.info("Listening on {}:{}", address, port);
+		this.self = new Host(InetAddress.getByName(address), Integer.parseInt(port));
+		this.pendingRequests = new LinkedList<>();
+		this.operationSequence = new HashMap<>();
+		this.numRetries = new HashMap<>();
 
-        Properties channelProps = new Properties();
-        channelProps.setProperty(TCPChannel.ADDRESS_KEY, address);
-        channelProps.setProperty(TCPChannel.PORT_KEY, port); // The port to bind to
-        channelProps.setProperty(TCPChannel.HEARTBEAT_INTERVAL_KEY, "1000");
-        channelProps.setProperty(TCPChannel.HEARTBEAT_TOLERANCE_KEY, "3000");
-        channelProps.setProperty(TCPChannel.CONNECT_TIMEOUT_KEY, "1000");
-        channelId = createChannel(TCPChannel.NAME, channelProps);
+		REPLICA_ID = self.getPort(); // port number will be the replica ID
 
-        /*-------------------- Register Channel Events ------------------------------- */
-        registerChannelEventHandler(channelId, OutConnectionDown.EVENT_ID, this::uponOutConnectionDown);
-        registerChannelEventHandler(channelId, OutConnectionFailed.EVENT_ID, this::uponOutConnectionFailed);
-        registerChannelEventHandler(channelId, OutConnectionUp.EVENT_ID, this::uponOutConnectionUp);
-        registerChannelEventHandler(channelId, InConnectionUp.EVENT_ID, this::uponInConnectionUp);
-        registerChannelEventHandler(channelId, InConnectionDown.EVENT_ID, this::uponInConnectionDown);
+		Properties channelProps = new Properties();
+		channelProps.setProperty(TCPChannel.ADDRESS_KEY, address);
+		channelProps.setProperty(TCPChannel.PORT_KEY, port); // The port to bind to
+		channelProps.setProperty(TCPChannel.HEARTBEAT_INTERVAL_KEY, "1000");
+		channelProps.setProperty(TCPChannel.HEARTBEAT_TOLERANCE_KEY, "3000");
+		channelProps.setProperty(TCPChannel.CONNECT_TIMEOUT_KEY, "1000");
+		channelId = createChannel(TCPChannel.NAME, channelProps);
 
-        /*--------------------- Register Request Handlers ----------------------------- */
-        registerRequestHandler(OrderRequest.REQUEST_ID, this::uponOrderRequest);
-        registerRequestHandler(JoinedRequest.REQUEST_ID, this::uponJoinedRequest);
+		/*-------------------- Register Channel Events ------------------------------- */
+		registerChannelEventHandler(channelId, OutConnectionDown.EVENT_ID, this::uponOutConnectionDown);
+		registerChannelEventHandler(channelId, OutConnectionFailed.EVENT_ID, this::uponOutConnectionFailed);
+		registerChannelEventHandler(channelId, OutConnectionUp.EVENT_ID, this::uponOutConnectionUp);
+		registerChannelEventHandler(channelId, InConnectionUp.EVENT_ID, this::uponInConnectionUp);
+		registerChannelEventHandler(channelId, InConnectionDown.EVENT_ID, this::uponInConnectionDown);
 
-        /*--------------------- Register Reply Handlers ----------------------------- */
-        registerReplyHandler(CurrentStateReply.REQUEST_ID, this::uponCurrentStateReply);
-        registerReplyHandler(JoinedReply.REQUEST_ID, this::uponJoinedReply);
+		/*--------------------- Register Request Handlers ----------------------------- */
+		registerRequestHandler(OrderRequest.REQUEST_ID, this::uponOrderRequest);
+		registerRequestHandler(JoinedRequest.REQUEST_ID, this::uponJoinedRequest);
 
-        /*-------------------- Register Message Handlers -------------------------- */
-        registerMessageHandler(channelId, ResponseMessage.MSG_ID, null, this::uponMsgFail);
+		/*--------------------- Register Reply Handlers ----------------------------- */
+		registerReplyHandler(CurrentStateReply.REQUEST_ID, this::uponCurrentStateReply);
+		registerReplyHandler(JoinedReply.REQUEST_ID, this::uponJoinedReply);
 
-        /*--------------------- Register Notification Handlers ----------------------------- */
-        subscribeNotification(DecidedNotification.NOTIFICATION_ID, this::uponDecidedNotification);
-    }
+		/*-------------------- Register Message Handlers -------------------------- */
+		registerMessageHandler(channelId, ResponseMessage.MSG_ID, null, this::uponMsgFail);
 
-    @Override
-    public void init(Properties props) {
-        // Inform the state machine protocol about the channel we created in the
-        // constructor
-        triggerNotification(new ChannelReadyNotification(channelId, self));
+		/*--------------------- Register Notification Handlers ----------------------------- */
+		subscribeNotification(DecidedNotification.NOTIFICATION_ID, this::uponDecidedNotification);
+	}
 
-        String host = props.getProperty("initial_membership");
-        String[] hosts = host.split(",");
-        List<Host> initialMembership = new LinkedList<>();
-        for (String s : hosts) {
-            String[] hostElements = s.split(":");
-            Host h;
-            try {
-                h = new Host(InetAddress.getByName(hostElements[0]), Integer.parseInt(hostElements[1]));
-            } catch (UnknownHostException e) {
-                throw new AssertionError("Error parsing initial_membership", e);
-            }
-            initialMembership.add(h);
-        }
+	@Override
+	public void init(Properties props) {
+		// Inform the state machine protocol about the channel we created in the
+		// constructor
+		triggerNotification(new ChannelReadyNotification(channelId, self));
 
-        if (initialMembership.contains(self)) {
-            state = State.ACTIVE;
-            logger.debug("Starting in ACTIVE as I am part of initial membership");
-            // I'm part of the initial membership, so I'm assuming the system is
-            // Bootstrapping
-            membership = new LinkedList<>(initialMembership);
-            membership.forEach(this::openConnection);
-            triggerNotification(new JoinedNotification(membership, 0));
-        } else {
-            // You have to do something to join the system and know which instance you
-            // joined
-            // (and copy the state of that instance)
+		String host = props.getProperty("initial_membership");
+		String[] hosts = host.split(",");
+		List<Host> initialMembership = new LinkedList<>();
+		for (String s : hosts) {
+			String[] hostElements = s.split(":");
+			Host h;
+			try {
+				h = new Host(InetAddress.getByName(hostElements[0]), Integer.parseInt(hostElements[1]));
+			} catch (UnknownHostException e) {
+				throw new AssertionError("Error parsing initial_membership", e);
+			}
+			initialMembership.add(h);
+		}
 
-            state = State.JOINING;
-            logger.debug("Starting in JOINING as I am not part of initial membership");
+		if (initialMembership.contains(self)) {
+			state = State.ACTIVE;
+			logger.debug("Starting in ACTIVE as I am part of initial membership");
+			// I'm part of the initial membership, so I'm assuming the system is
+			// Bootstrapping
+			membership = new LinkedList<>(initialMembership);
+			membership.forEach(this::openConnection);
+			triggerNotification(new JoinedNotification(membership, 0));
+		} else {
+			// You have to do something to join the system and know which instance you
+			// joined
+			// (and copy the state of that instance)
 
-            Collections.shuffle(initialMembership);
-            Host connectedHost = initialMembership.get(0);
-            openConnection(connectedHost);
+			state = State.JOINING;
+			logger.debug("Starting in JOINING as I am not part of initial membership");
 
-            sendRequest(new JoinedRequest(self), StateMachine.PROTOCOL_ID);
-        }
+			Collections.shuffle(initialMembership);
+			Host connectedHost = initialMembership.get(0);
+			openConnection(connectedHost);
 
-    }
+			sendRequest(new JoinedRequest(self), StateMachine.PROTOCOL_ID);
+		}
 
-    /*--------------------------------- Requests ---------------------------------------- */
-    private void uponOrderRequest(OrderRequest request, short sourceProto) {
-        logger.debug("Received request: " + request);
-        if (state == State.JOINING) {
-            // Do something smart (like buffering the requests)
-            pendingRequests.add(request); // right???
-        } else if (state == State.ACTIVE) {
-            // Also do something smart, we don't want an infinite number of instances
-            // active
+	}
 
-            // Maybe you should modify what is it that you are proposing so that you
-            // remember that this operation was issued by the application
-            // (and not an internal operation, check the uponDecidedNotification)
+	/*--------------------------------- Requests ---------------------------------------- */
+	private void uponOrderRequest(OrderRequest request, short sourceProto) {
+		logger.debug("Received request: " + request);
+		if (state == State.JOINING) {
+			// Do something smart (like buffering the requests)
+			pendingRequests.add(request); // right???
+		} else if (state == State.ACTIVE) {
+			// Also do something smart, we don't want an infinite number of instances
+			// active
 
-            byte[] operation = null;
-            operation = Utils.joinByteArray(request.getOperation(), 'a');
+			// Maybe you should modify what is it that you are proposing so that you
+			// remember that this operation was issued by the application
+			// (and not an internal operation, check the uponDecidedNotification)
 
-            pendingRequests.add(new OrderRequest(request.getOpId(), operation));
+			byte[] operation = null;
+			operation = Utils.joinByteArray(request.getOperation(), 'a');
 
-            // only this request in queue
-            if (pendingRequests.size() == 1) {
-                OrderRequest orderRequest = pendingRequests.poll();
-                sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), operation), Paxos.PROTOCOL_ID);
-            }
-        }
-    }
+			pendingRequests.add(new OrderRequest(request.getOpId(), operation));
 
-    private void uponJoinedRequest(JoinedRequest request, short sourceProto) {
-        // A replica requested to join the system
-        // Propose a request as a StateMachine operation
-        logger.debug("Request to join by: " + request.getReplica());
-        try {
+			// only this request in queue
+			if (pendingRequests.size() == 1) {
+				OrderRequest orderRequest = pendingRequests.poll();
+				sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), operation), Paxos.PROTOCOL_ID);
+			}
+		}
+	}
 
-            byte[] tmp = Utils.convertToBytes(new StateMachineOperation(request.getReplica(), self));
-            byte[] operation = Utils.joinByteArray(tmp, 's');
+	private void uponJoinedRequest(JoinedRequest request, short sourceProto) {
+		// A replica requested to join the system
+		// Propose a request as a StateMachine operation
+		logger.debug("Request to join by: " + request.getReplica());
+		try {
 
-            pendingRequests.add(new OrderRequest(UUID.randomUUID(), operation));
-        } catch (IOException e) {
-            // TODO Auto-generated catch block
-            e.printStackTrace();
-        }
-    }
+			byte[] tmp = Utils.convertToBytes(new StateMachineOperation(request.getReplica(), self));
+			byte[] operation = Utils.joinByteArray(tmp, 's');
 
-    private void uponJoinedReply(JoinedReply reply, short sourceProto) {
-        // This replica joined the system
-        // The replica that replied sent the instance, state and membership
-        logger.debug("Joined in instance: " + reply.getInstance());
+			pendingRequests.add(new OrderRequest(UUID.randomUUID(), operation));
+		} catch (IOException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
 
-        membership = new LinkedList<>(reply.getMembership());
-        membership.forEach(this::openConnection);
-        nextInstance = reply.getInstance();
+	private void uponJoinedReply(JoinedReply reply, short sourceProto) {
+		// This replica joined the system
+		// The replica that replied sent the instance, state and membership
+		logger.debug("Joined in instance: " + reply.getInstance());
 
-        sendRequest(new InstallStateRequest(reply.getState()), HashApp.PROTO_ID);
-        // Notifies Agreement Protocol that this replica joined the system
-        triggerNotification(new JoinedNotification(membership, reply.getInstance()));
-    }
+		membership = new LinkedList<>(reply.getMembership());
+		membership.forEach(this::openConnection);
+		nextInstance = reply.getInstance();
 
-    private void uponCurrentStateReply(CurrentStateReply reply, short sourceProto) {
-        // Receives the reply from the Application
-        // Sends reply to the replica that requested to Join the system(JoinedReply)
-        logger.debug("Got the state of the system in instance: " + reply.getInstance());
+		sendRequest(new InstallStateRequest(reply.getState()), HashApp.PROTO_ID);
+		// Notifies Agreement Protocol that this replica joined the system
+		triggerNotification(new JoinedNotification(membership, reply.getInstance()));
+	}
 
-        sendReply(new JoinedReply(nextInstance, membership, reply.getState()), StateMachine.PROTOCOL_ID);
-    }
+	private void uponCurrentStateReply(CurrentStateReply reply, short sourceProto) {
+		// Receives the reply from the Application
+		// Sends reply to the replica that requested to Join the system(JoinedReply)
+		logger.debug("Got the state of the system in instance: " + reply.getInstance());
 
-    /*--------------------------------- Notifications ---------------------------------------- */
-    private void uponDecidedNotification(DecidedNotification notification, short sourceProto) {
-        logger.debug("Received notification: " + notification);
-        // Maybe we should make sure operations are executed in order?
+		sendReply(new JoinedReply(nextInstance, membership, reply.getState()), StateMachine.PROTOCOL_ID);
+	}
 
-        // You should be careful and check if this operation is an application operation
-        // (and send it up)
-        // or if this is an operations that was executed by the state machine itself (in
-        // which case you should execute)
+	/*--------------------------------- Notifications ---------------------------------------- */
+	private void uponDecidedNotification(DecidedNotification notification, short sourceProto) {
+		logger.debug("Received notification: " + notification);
+		// Maybe we should make sure operations are executed in order?
 
-        // Save operationSequence -- What to save??
-        // operationSequence.put(nextInstance, notification.getInstance());
+		// You should be careful and check if this operation is an application operation
+		// (and send it up)
+		// or if this is an operations that was executed by the state machine itself (in
+		// which case you should execute)
 
-        Operation op = Utils.splitByteArray(notification.getOperation());
-        char c = op.getC();
-        byte[] operation = op.getOperation();
+		// Save operationSequence -- What to save??
+		// operationSequence.put(nextInstance, notification.getInstance());
 
-        if (state != State.ACTIVE) { // if it is not ACTIVE, ignores
-            return;
-        } else if (c != 's') { // it's an application operation
-            logger.debug("Application operation");
-            triggerNotification(new ExecuteNotification(notification.getOpId(), operation));
-            nextInstance++;
-        } else if (nextInstance < notification.getInstance()) { // state machine operation
-            // only executes the operations if it's instance > nextInstance
-            // get currentState first
-            logger.debug("StateMachine operation");
-            try {
-                StateMachineOperation st = (StateMachineOperation) Utils.convertFromBytes(operation);
+		Operation op = Utils.splitByteArray(notification.getOperation());
+		char c = op.getC();
+		byte[] operation = op.getOperation();
 
-                Host host = st.getToAdd();
-                if (st.getToAdd() == self || st.getToAdd().equals(self)) {
-                    membership.forEach(h -> sendRequest(new AddReplicaRequest(nextInstance, host), Paxos.PROTOCOL_ID));
+		if (state != State.ACTIVE) { // if it is not ACTIVE, ignores
+			return;
+		} else if (c != 's') { // it's an application operation
+			logger.debug("Application operation");
+			triggerNotification(new ExecuteNotification(notification.getOpId(), operation));
+			nextInstance++;
+		} else if (nextInstance < notification.getInstance()) { // state machine operation
+			// only executes the operations if it's instance > nextInstance
+			// get currentState first
+			logger.debug("StateMachine operation");
+			try {
+				StateMachineOperation st = (StateMachineOperation) Utils.convertFromBytes(operation);
 
-                    membership.add(host);
-                    sendRequest(new CurrentStateRequest(nextInstance), HashApp.PROTO_ID);
-                }
-                nextInstance++;
-            } catch (IOException | ClassNotFoundException e) {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-        }
-        OrderRequest orderRequest = pendingRequests.poll();
-        if (orderRequest != null)
-            sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), operation), Paxos.PROTOCOL_ID);
-    }
+				Host host = st.getToAdd();
+				if (st.getToAdd() == self || st.getToAdd().equals(self)) {
+					membership.forEach(h -> sendRequest(new AddReplicaRequest(nextInstance, host), Paxos.PROTOCOL_ID));
 
-    /*--------------------------------- Multi-Paxos ---------------------------------------- */
-    private void uponChangeLeader(DecidedNotification notification, short sourceProto) {
-        // For Multi-Paxos
-        // Change type of notification
-        // a partir dos 15 min Multi Paxos Lab 7
-    }
+					membership.add(host);
+					sendRequest(new CurrentStateRequest(nextInstance), HashApp.PROTO_ID);
+				}
+				nextInstance++;
+			} catch (IOException | ClassNotFoundException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+		}
+		OrderRequest orderRequest = pendingRequests.poll();
+		if (orderRequest != null)
+			sendRequest(new ProposeRequest(nextInstance, orderRequest.getOpId(), operation), Paxos.PROTOCOL_ID);
+	}
 
-    /*--------------------------------- Messages ---------------------------------------- */
-    private void uponMsgFail(ProtoMessage msg, Host host, short destProto, Throwable throwable, int channelId) {
-        // If a message fails to be sent, for whatever reason, log the message and the
-        // reason
-        logger.error("Message {} to {} failed, reason: {}", msg, host, throwable);
-    }
+	/*--------------------------------- Multi-Paxos ---------------------------------------- */
+	private void uponChangeLeader(DecidedNotification notification, short sourceProto) {
+		// For Multi-Paxos
+		// Change type of notification
+		// a partir dos 15 min Multi Paxos Lab 7
+	}
 
-    /*
-     * --------------------------------- TCPChannel Events
-     * ----------------------------
-     */
-    private void uponOutConnectionFailed(OutConnectionFailed<ProtoMessage> event, int channelId) {
-        logger.debug("Connection to {} failed, cause: {}", event.getNode(), event.getCause());
-        try {
-            Thread.sleep(1000);
-        } catch (InterruptedException e) {
-            e.printStackTrace();
-        }
-        if (!triedToConnect.contains(event.getNode())) {
-            short retries = 0;
-            while (retries < 3) {
-                retries++;
-                if (membership.contains(event.getNode())) {
-                    try {
-                        triedToConnect.add(event.getNode());
-                        openConnection(event.getNode());
-                        logger.info("Connection to {} restored!", event.getNode());
-                        triedToConnect.remove(event.getNode());
-                        return;
-                    } catch (Exception e) {
-                        e.printStackTrace();
-                    }
-                }
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    e.printStackTrace();
-                }
-            }
-        } else { // already tried to connect and failed, remove it
-            // remove node from system
-            boolean wasRemoved = membership.remove(event.getNode());
-            if (wasRemoved) // only sends request if is still in membership
-                sendRequest(new RemoveReplicaRequest(nextInstance, event.getNode()), Paxos.PROTOCOL_ID);
-        }
-    }
+	/*--------------------------------- Messages ---------------------------------------- */
+	private void uponMsgFail(ProtoMessage msg, Host host, short destProto, Throwable throwable, int channelId) {
+		// If a message fails to be sent, for whatever reason, log the message and the
+		// reason
+		logger.error("Message {} to {} failed, reason: {}", msg, host, throwable);
+	}
 
-    private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
-        logger.debug("Connection to {} is up", event.getNode());
-    }
+	/*
+	 * --------------------------------- TCPChannel Events
+	 * ----------------------------
+	 */
+	private void uponOutConnectionFailed(OutConnectionFailed<ProtoMessage> event, int channelId) {
+		logger.debug("Connection to {} failed, cause: {}", event.getNode(), event.getCause());
 
-    private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
-        logger.debug("Connection to {} is down, cause {}", event.getNode(), event.getCause());
-    }
+		short retries = 0;
+		if (numRetries.containsKey(event.getNode()))
+			retries = numRetries.get(event.getNode());
 
-    private void uponInConnectionUp(InConnectionUp event, int channelId) {
-        logger.trace("Connection from {} is up", event.getNode());
-    }
+		if (retries < 3 && membership.contains(event.getNode())) {
+			numRetries.put(event.getNode(), retries++);
+			openConnection(event.getNode());
+			logger.info("Connection to {} restored!", event.getNode());
 
-    private void uponInConnectionDown(InConnectionDown event, int channelId) {
-        logger.trace("Connection from {} is down, cause: {}", event.getNode(), event.getCause());
-    }
+			try {
+				Thread.sleep(1000);
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		} else {
+			boolean wasRemoved = membership.remove(event.getNode());
+			if (wasRemoved) // only sends request if is still in membership
+				sendRequest(new RemoveReplicaRequest(nextInstance, event.getNode()), Paxos.PROTOCOL_ID);
+		}
+	}
+
+	private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
+		logger.debug("Connection to {} is up", event.getNode());
+	}
+
+	private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
+		logger.debug("Connection to {} is down, cause {}", event.getNode(), event.getCause());
+	}
+
+	private void uponInConnectionUp(InConnectionUp event, int channelId) {
+		logger.trace("Connection from {} is up", event.getNode());
+	}
+
+	private void uponInConnectionDown(InConnectionDown event, int channelId) {
+		logger.trace("Connection from {} is down, cause: {}", event.getNode(), event.getCause());
+	}
 
 }

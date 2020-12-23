@@ -1,4 +1,4 @@
-2020-12-23 11:20:09:863 0 sec: 0 operations; est completion in 0 second 
-2020-12-23 11:20:14:783 5 sec: 1 operations; 0,2 current ops/sec; est completion in 2 days 21 hours [READ AverageLatency(us)=104006] 
-2020-12-23 11:20:19:785 10 sec: 1 operations; 0 current ops/sec; est completion in 5 days 18 hours  
+2020-12-23 12:26:14:251 0 sec: 0 operations; est completion in 0 second 
+2020-12-23 12:26:19:223 5 sec: 2836 operations; 566,29 current ops/sec; est completion in 1 minute [READ AverageLatency(us)=1403,24] [UPDATE AverageLatency(us)=1481,79] 
+2020-12-23 12:26:24:217 10 sec: 9408 operations; 1315,98 current ops/sec; est completion in 44 seconds [READ AverageLatency(us)=752,48] [UPDATE AverageLatency(us)=750,3] 
 Op Timed out...127.0.0.1:6000 2
