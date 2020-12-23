@@ -75,6 +75,7 @@ public class StateMachine extends GenericProtocol {
 	private Map<Integer, Integer> operationSequence; // sequence of operations <Instance, Sqn>
 	private List<Host> membership;
 	private Queue<OrderRequest> pendingRequests; // maybe order by operationId with SortedMap
+	private List<Host> triedToConnect;
 	private int nextInstance;
 
 	public StateMachine(Properties props) throws IOException, HandlerRegistrationException {
@@ -88,6 +89,7 @@ public class StateMachine extends GenericProtocol {
 		this.self = new Host(InetAddress.getByName(address), Integer.parseInt(port));
 		this.pendingRequests = new LinkedList<>();
 		this.operationSequence = new HashMap<>();
+		this.triedToConnect = new LinkedList<>();
 
 		REPLICA_ID = self.getPort(); // port number will be the replica ID
 
@@ -301,22 +303,34 @@ public class StateMachine extends GenericProtocol {
 	private void uponOutConnectionFailed(OutConnectionFailed<ProtoMessage> event, int channelId) {
 		logger.debug("Connection to {} failed, cause: {}", event.getNode(), event.getCause());
 
-		short retries = 0;
-		while (retries < 5) {
-			if (membership.contains(event.getNode())) {
-				logger.info("Connection to {} restored!", event.getNode());
-				openConnection(event.getNode());
-				return;
+		if (!triedToConnect.contains(event.getNode())) {
+			short retries = 0;
+			while (retries < 3) {
+				retries++;
+				if (membership.contains(event.getNode())) {
+					try {
+						triedToConnect.add(event.getNode());
+
+						openConnection(event.getNode());
+						logger.info("Connection to {} restored!", event.getNode());
+
+						return;
+					} catch (Exception e) {
+						e.printStackTrace();
+					}
+				}
+				try {
+					Thread.sleep(1000);
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				}
 			}
-			try {
-				Thread.sleep(1000);
-			} catch (InterruptedException e) {
-				e.printStackTrace();
-			}
+		} else { // already tried to connect and failed, remove it
+			// remove node from system
+			boolean wasRemoved = membership.remove(event.getNode());
+			if (wasRemoved) // only sends request if is still in membership
+				sendRequest(new RemoveReplicaRequest(nextInstance, event.getNode()), Paxos.PROTOCOL_ID);
 		}
-		// remove node from system
-		membership.remove(event.getNode());
-		sendRequest(new RemoveReplicaRequest(nextInstance, event.getNode()), Paxos.PROTOCOL_ID);
 	}
 
 	private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
